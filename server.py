@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException
 import threading
 import json
 
-from ..my_framework.apps.journalist import generate_article_and_metadata, post_article_to_cms
+from my_framework.apps.journalist import generate_article_and_metadata, post_article_to_cms
 
 app = FastAPI(
     title="Advanced AI Journalist Orchestrator",
