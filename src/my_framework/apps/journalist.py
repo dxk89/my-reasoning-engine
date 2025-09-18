@@ -851,7 +851,7 @@ INDUSTRY_MAP = {
 }
 
 # ==============================================================================
-# TOOL 1: GENERATE ARTICLE CONTENT AND METADATA (WITH PROMPTS RESTORED)
+# TOOL 1: GENERATE ARTICLE CONTENT AND METADATA (WITH FULL LOGGING)
 # ==============================================================================
 @tool
 def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: str, api_key: str) -> str:
@@ -878,8 +878,6 @@ def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: s
 
     # --- Step 2: Write Initial Draft ---
     log("   -> Step 2.1: Sending request to LLM for initial draft...")
-
-    # --- PROMPT DEFINITION RESTORED ---
     drafting_prompt = f"""
     You are an expert journalist. Based on the provided SOURCE CONTENT, write a draft of an article that follows the USER PROMPT.
     USER PROMPT: "{user_prompt}"
@@ -889,16 +887,12 @@ def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: s
     ---
     Now, write the initial draft of the article.
     """
-    # --------------------------------
-
     draft_response = llm.invoke([{"role": "user", "content": drafting_prompt}])
     draft_article = draft_response.content
     log(f"   -> Step 2.2: Initial draft received ({len(draft_article)} characters).")
 
     # --- Step 3: Fact-Check and Revise ---
     log("   -> Step 3.1: Sending request to LLM for revision...")
-
-    # --- PROMPT DEFINITION RESTORED ---
     revision_prompt = f"""
     You are a meticulous fact-checker. Review the DRAFT ARTICLE and ensure every claim is supported by the SOURCE CONTENT.
     Correct inaccuracies, remove unsupported claims, and improve the writing.
@@ -913,8 +907,6 @@ def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: s
     ---
     Now, provide the final, fact-checked article in the required JSON format.
     """
-    # --------------------------------
-
     revision_response_raw = llm.invoke([{"role": "user", "content": revision_prompt}])
     log(f"   -> Step 3.2: Revision response received ({len(revision_response_raw.content)} characters).")
     
@@ -926,11 +918,30 @@ def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: s
         log(f"   -> 🔥 Step 3 FAILED: Could not parse JSON from revision response: {e}")
         return json.dumps({"error": f"Failed to parse fact-checked article JSON. Response: {revision_response_raw.content}"})
 
-    # (The rest of the function continues as before...)
-    # ...
+    # --- Step 4: Generate Smart Metadata ---
+    log("   -> Step 4.1: Generating smart metadata...")
+    article_title = final_article_data.get("title", "")
+    article_body = final_article_data.get("body", "")
+    # This assumes you have a get_subjective_metadata_prompt function defined above
+    metadata_prompt = get_subjective_metadata_prompt(article_title, article_body)
+    
+    try:
+        metadata_response_raw = llm.invoke([{"role": "user", "content": metadata_prompt}])
+        clean_metadata_json = metadata_response_raw.content.strip().replace("```json", "").replace("```", "").strip()
+        metadata = json.loads(clean_metadata_json)
+        log("   -> Step 4.2: Successfully generated and parsed metadata JSON.")
+    except Exception as e:
+        log(f"   -> 🔥 Step 4 FAILED: AI metadata generation failed: {e}")
+        return json.dumps({"error": f"Failed to generate metadata with AI: {e}"})
 
+    # --- Step 5: Combine and Return ---
+    log("   -> Step 5.1: Combining all data...")
+    final_data = {
+        **final_article_data, # Includes title and body
+        **metadata
+    }
     log("✅ TOOL 1: Finished successfully.")
-    return json.dumps(final_article_data) # Placeholder return
+    return json.dumps(final_data)
 
 # ==============================================================================
 # TOOL 2: POST ARTICLE TO THE CMS (WITH DETAILED LOGGING)
@@ -971,7 +982,7 @@ def post_article_to_cms(article_json_string: str, login_url: str, username: str,
         time.sleep(5)
         log("   -> Step 2.5: Login successful.")
 
-        # ... (rest of your Selenium logic with detailed logging) ...
+        # ... (rest of your Selenium logic would go here)
         
         log("✅ TOOL 2: Finished successfully.")
         return "Article posted successfully."
