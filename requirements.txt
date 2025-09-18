@@ -11,7 +11,7 @@ selenium
 webdriver-manager
 
 # AI and data handling
-openai
+openai>=1.40.0
 pydantic
 faiss-cpu
 tiktoken
