@@ -3,7 +3,7 @@
 import os
 from openai import OpenAI, Timeout
 from typing import List
-from pantic import Field, SecretStr, BaseModel, ConfigDict
+from pydantic import Field, SecretStr, BaseModel, ConfigDict
 from dotenv import load_dotenv
 
 from .base import BaseChatModel, BaseEmbedding
