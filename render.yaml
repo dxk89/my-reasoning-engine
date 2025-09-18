@@ -7,8 +7,8 @@ services:
     plan: free
     buildCommand: "pip install -r requirements.txt"
     # --- THIS IS THE FIX ---
-    # The command now uses the $PORT environment variable, which Render sets automatically.
-    startCommand: "uvicorn app.server:app --host 0.0.0.0 --port $PORT"
+    # The start command now runs our connection test script directly.
+    startCommand: "python examples/test_openai_connection.py"
     envVars:
       - key: OPENAI_API_KEY
         sync: false
