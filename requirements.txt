@@ -1,12 +1,33 @@
 # requirements.txt
 
+# Core web framework
+fastapi==0.103.2
+uvicorn==0.23.2
+
+# HTTP requests and web scraping
+requests==2.31.0
+beautifulsoup4
+selenium
+webdriver-manager
+
+# AI and data handling
+openai
+pydantic
+faiss-cpu
+tiktoken
+
+# Utilities
+python-dotenv
+pytz
+
+# The following were in your original file but may not be strictly necessary
+# if you are only running the FastAPI app. I'm keeping them for completeness.
 aiofiles==23.2.1
 anyio==3.7.1
 certifi==2023.7.22
 charset-normalizer==3.3.0
 click==8.1.7
 colorama==0.4.6
-fastapi==0.103.2
 Flask==2.2.3
 gunicorn==20.1.0
 h11==0.14.0
@@ -14,12 +35,8 @@ idna==3.4
 itsdangerous==2.1.2
 Jinja2==3.1.2
 MarkupSafe==2.1.3
-python-dotenv==1.0.0
-requests==2.31.0
 sniffio==1.3.0
 starlette==0.27.0
 typing_extensions==4.8.0
 urllib3==2.0.6
-uvicorn==0.23.2
 Werkzeug==2.2.3
-pytz 
