@@ -1,0 +1,23 @@
+# This is a recipe file for Render.com to automatically build and deploy your service.
+
+services:
+  # This defines your main web service (the reasoning engine API).
+  - type: web
+    name: my-reasoning-engine
+    # This tells Render it's a Python project.
+    env: python
+    # This uses Render's free tier, which is great for starting out.
+    # Note: Free instances may spin down after inactivity and can be slower to start.
+    plan: free
+    # This is the command Render runs to install all your project's libraries.
+    buildCommand: "pip install -r requirements.txt"
+    # This is the command that starts your API server.
+    startCommand: "uvicorn my_framework.apps.main:app --host 0.0.0.0 --port 10000"
+    # This section is for your secret API keys.
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false # This tells Render not to read the value from this file.
+      - key: NEWS_API_KEY
+        sync: false # You will add the actual key in the Render dashboard.
+      - key: PYTHON_VERSION
+        value: 3.11 # It's good practice to specify a Python version.
