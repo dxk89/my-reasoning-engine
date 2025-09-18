@@ -6,7 +6,7 @@ from typing import List
 from pydantic import Field, SecretStr, BaseModel, ConfigDict
 from dotenv import load_dotenv
 
-from .base import BaseChatModel
+from .base import BaseChatModel, BaseEmbedding # <--- THIS LINE IS THE FIX
 from ..core.schemas import AIMessage, MessageType
 
 load_dotenv()
@@ -28,6 +28,7 @@ class ChatOpenAI(BaseModel, BaseChatModel):
 
     def __init__(self, **data):
         super().__init__(**data)
+        # Initialize the client here for efficiency
         self.client = OpenAI(api_key=self.api_key.get_secret_value(), timeout=Timeout(120.0))
 
     def invoke(self, input: List[MessageType], config=None) -> AIMessage:
@@ -47,7 +48,6 @@ class ChatOpenAI(BaseModel, BaseChatModel):
             log("🔥 OpenAI API call timed out after 120 seconds.")
             return AIMessage(content='{"error": "AI model timed out"}')
         except Exception as e:
-            # This is the most important change: We are now logging the full error.
             log(f"🔥 An unexpected error occurred during the OpenAI API call: {e}")
             return AIMessage(content=f'{{"error": "An unexpected error occurred with the AI model: {e}"}}')
 
