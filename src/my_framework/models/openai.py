@@ -24,18 +24,22 @@ class ChatOpenAI(BaseModel, BaseChatModel):
     model_name: str = Field(default="gpt-4o", alias="model")
     temperature: float = 0.7
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
+    client: OpenAI = None
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Initialize the client once with strict timeouts
+        self.client = OpenAI(
+            api_key=self.api_key.get_secret_value(),
+            timeout=Timeout(20.0, connect=5.0) # 20-second total, 5-second connect timeout
+        )
 
     def invoke(self, input: List[MessageType], config=None) -> AIMessage:
-        # --- THIS IS THE FIX ---
-        # The client is initialized here without the unsupported 'proxies' argument.
-        client = OpenAI(api_key=self.api_key.get_secret_value(), timeout=Timeout(120.0))
-        # --------------------
-        
         messages = [msg.model_dump() for msg in input]
         
-        log(f"Sending request to OpenAI model '{self.model_name}'...")
+        log(f"Sending request to OpenAI model '{self.model_name}' with a 20-second timeout...")
         try:
-            response = client.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
                 temperature=self.temperature
@@ -44,10 +48,11 @@ class ChatOpenAI(BaseModel, BaseChatModel):
             content = response.choices[0].message.content
             return AIMessage(content=content or "")
         except Timeout:
-            log("🔥 OpenAI API call timed out after 120 seconds.")
+            log("🔥 OpenAI API call timed out as expected.")
             return AIMessage(content='{"error": "AI model timed out"}')
         except Exception as e:
-            log(f"🔥 An unexpected error occurred during the OpenAI API call: {e}")
+            # This will now log the specific network error we are looking for
+            log(f"🔥 An unexpected error occurred during the OpenAI API call. Type: {type(e).__name__}, Error: {e}")
             return AIMessage(content=f'{{"error": "An unexpected error occurred with the AI model: {e}"}}')
 
 class OpenAIEmbedding(BaseEmbedding):
@@ -59,14 +64,17 @@ class OpenAIEmbedding(BaseEmbedding):
 
     model_name: str = Field(default="text-embedding-3-small", alias="model")
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
+    client: OpenAI = None
     
-    def _create_client(self):
-        # Ensure the 'proxies' argument is also removed here if present.
-        return OpenAI(api_key=self.api_key.get_secret_value(), timeout=Timeout(120.0))
+    def __init__(self, **data):
+        super().__init__(**data)
+        self.client = OpenAI(
+            api_key=self.api_key.get_secret_value(),
+            timeout=Timeout(20.0, connect=5.0)
+        )
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        client = self._create_client()
-        response = client.embeddings.create(
+        response = self.client.embeddings.create(
             model=self.model_name,
             input=texts
         )
