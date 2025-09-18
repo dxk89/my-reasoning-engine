@@ -9,7 +9,6 @@ Requires-Dist: uvicorn[standard]>=0.23
 Requires-Dist: faiss-cpu>=1.7
 Requires-Dist: tiktoken>=0.5
 Requires-Dist: python-dotenv>=1.0
-Requires-Dist: newsapi-python>=0.2.7
 Requires-Dist: requests
 Requires-Dist: beautifulsoup4
 Requires-Dist: selenium>=4.0.0

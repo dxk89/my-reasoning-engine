@@ -12,7 +12,6 @@ dependencies = [
     "faiss-cpu>=1.7",
     "tiktoken>=0.5",
     "python-dotenv>=1.0",
-    "newsapi-python>=0.2.7",
     "requests",
     "beautifulsoup4",
     "selenium>=4.0.0",
