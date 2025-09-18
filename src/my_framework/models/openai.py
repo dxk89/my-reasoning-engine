@@ -1,9 +1,11 @@
-# File: my_framework/src/my_framework/models/openai.py
+# File: src/my_framework/models/openai.py
 
 import os
 from openai import OpenAI
 from typing import List
-from pydantic import Field, SecretStr, BaseModel 
+# --- THIS IS THE FIX ---
+from pydantic import Field, SecretStr, BaseModel, ConfigDict
+# --------------------
 from dotenv import load_dotenv
 
 from .base import BaseChatModel, BaseEmbedding
@@ -11,14 +13,18 @@ from ..core.schemas import AIMessage, MessageType
 
 load_dotenv()
 
-# This class is correct as is. BaseModel comes first.
 class ChatOpenAI(BaseModel, BaseChatModel):
     """A wrapper for the OpenAI Chat Completion API."""
-    
+
+    # --- THIS IS THE FIX ---
+    # We add a model_config to tell Pydantic that 'model_' is not a protected namespace for us.
+    model_config = ConfigDict(protected_namespaces=())
+    # --------------------
+
     model_name: str = Field(default="gpt-4o", alias="model")
     temperature: float = 0.7
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
-    
+
     class Config:
         arbitrary_types_allowed = True
 
@@ -36,14 +42,16 @@ class ChatOpenAI(BaseModel, BaseChatModel):
         content = response.choices[0].message.content
         return AIMessage(content=content or "")
 
-# --- THE FIX IS ON THE LINE BELOW ---
-# We remove the redundant 'BaseModel' from this line.
 class OpenAIEmbedding(BaseEmbedding):
     """A wrapper for the OpenAI Embedding API."""
 
+    # --- THIS IS THE FIX ---
+    model_config = ConfigDict(protected_namespaces=())
+    # --------------------
+
     model_name: str = Field(default="text-embedding-3-small", alias="model")
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
-    
+
     class Config:
         arbitrary_types_allowed = True
 
