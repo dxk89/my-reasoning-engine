@@ -6,7 +6,7 @@ from typing import List
 from pydantic import Field, SecretStr, BaseModel, ConfigDict
 from dotenv import load_dotenv
 
-from .base import BaseChatModel, BaseEmbedding
+from .base import BaseChatModel
 from ..core.schemas import AIMessage, MessageType
 
 load_dotenv()
@@ -24,18 +24,18 @@ class ChatOpenAI(BaseModel, BaseChatModel):
     model_name: str = Field(default="gpt-4o", alias="model")
     temperature: float = 0.7
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
+    client: OpenAI = None
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        self.client = OpenAI(api_key=self.api_key.get_secret_value(), timeout=Timeout(120.0))
 
     def invoke(self, input: List[MessageType], config=None) -> AIMessage:
-        # --- THIS IS THE FIX ---
-        # The client is initialized here without the unsupported 'proxies' argument.
-        client = OpenAI(api_key=self.api_key.get_secret_value(), timeout=Timeout(120.0))
-        # --------------------
-        
         messages = [msg.model_dump() for msg in input]
         
         log(f"Sending request to OpenAI model '{self.model_name}'...")
         try:
-            response = client.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
                 temperature=self.temperature
@@ -47,6 +47,7 @@ class ChatOpenAI(BaseModel, BaseChatModel):
             log("🔥 OpenAI API call timed out after 120 seconds.")
             return AIMessage(content='{"error": "AI model timed out"}')
         except Exception as e:
+            # This is the most important change: We are now logging the full error.
             log(f"🔥 An unexpected error occurred during the OpenAI API call: {e}")
             return AIMessage(content=f'{{"error": "An unexpected error occurred with the AI model: {e}"}}')
 
@@ -59,14 +60,14 @@ class OpenAIEmbedding(BaseEmbedding):
 
     model_name: str = Field(default="text-embedding-3-small", alias="model")
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
+    client: OpenAI = None
     
-    def _create_client(self):
-        # Ensure the 'proxies' argument is also removed here if present.
-        return OpenAI(api_key=self.api_key.get_secret_value(), timeout=Timeout(120.0))
+    def __init__(self, **data):
+        super().__init__(**data)
+        self.client = OpenAI(api_key=self.api_key.get_secret_value(), timeout=Timeout(120.0))
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        client = self._create_client()
-        response = client.embeddings.create(
+        response = self.client.embeddings.create(
             model=self.model_name,
             input=texts
         )
