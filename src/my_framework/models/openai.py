@@ -1,8 +1,7 @@
 # File: src/my_framework/models/openai.py
 
 import os
-from openai import OpenAI
-from openai import Timeout
+from openai import OpenAI, Timeout
 from typing import List
 from pydantic import Field, SecretStr, BaseModel, ConfigDict
 from dotenv import load_dotenv
@@ -12,7 +11,6 @@ from ..core.schemas import AIMessage, MessageType
 
 load_dotenv()
 
-# Helper for logging
 def log(message):
     print(f"   - [openai.py] {message}", flush=True)
 
@@ -28,8 +26,10 @@ class ChatOpenAI(BaseModel, BaseChatModel):
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
 
     def invoke(self, input: List[MessageType], config=None) -> AIMessage:
-        # Initialize client here
+        # --- THIS IS THE FIX ---
+        # The client is initialized here without the unsupported 'proxies' argument.
         client = OpenAI(api_key=self.api_key.get_secret_value(), timeout=Timeout(120.0))
+        # --------------------
         
         messages = [msg.model_dump() for msg in input]
         
@@ -45,12 +45,10 @@ class ChatOpenAI(BaseModel, BaseChatModel):
             return AIMessage(content=content or "")
         except Timeout:
             log("🔥 OpenAI API call timed out after 120 seconds.")
-            # Return an AIMessage with an error so the process can continue
             return AIMessage(content='{"error": "AI model timed out"}')
         except Exception as e:
             log(f"🔥 An unexpected error occurred during the OpenAI API call: {e}")
             return AIMessage(content=f'{{"error": "An unexpected error occurred with the AI model: {e}"}}')
-
 
 class OpenAIEmbedding(BaseEmbedding):
     """A wrapper for the OpenAI Embedding API."""
@@ -63,6 +61,7 @@ class OpenAIEmbedding(BaseEmbedding):
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
     
     def _create_client(self):
+        # Ensure the 'proxies' argument is also removed here if present.
         return OpenAI(api_key=self.api_key.get_secret_value(), timeout=Timeout(120.0))
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
