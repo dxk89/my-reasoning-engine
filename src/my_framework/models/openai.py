@@ -14,14 +14,12 @@ load_dotenv()
 class ChatOpenAI(BaseModel, BaseChatModel):
     """A wrapper for the OpenAI Chat Completion API."""
 
-    # --- THIS IS THE FIX ---
-    # All settings are combined into this single model_config.
-    # The old `class Config:` has been REMOVED.
+    # All settings are now correctly combined into this single model_config.
+    # The old `class Config:` has been removed.
     model_config = ConfigDict(
         protected_namespaces=(),
         arbitrary_types_allowed=True
     )
-    # --------------------
 
     model_name: str = Field(default="gpt-4o", alias="model")
     temperature: float = 0.7
@@ -44,13 +42,11 @@ class ChatOpenAI(BaseModel, BaseChatModel):
 class OpenAIEmbedding(BaseEmbedding):
     """A wrapper for the OpenAI Embedding API."""
 
-    # --- THIS IS THE FIX ---
-    # The same consolidation is applied here.
+    # The same fix is applied here.
     model_config = ConfigDict(
         protected_namespaces=(),
         arbitrary_types_allowed=True
     )
-    # --------------------
 
     model_name: str = Field(default="text-embedding-3-small", alias="model")
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
