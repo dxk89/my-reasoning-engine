@@ -5,19 +5,17 @@ services:
     name: my-reasoning-engine
     env: python
     plan: free
-    # Simplified the build command, as PYTHONPATH is the more direct solution.
     buildCommand: "pip install -r requirements.txt"
-    # The start command is correct.
-    startCommand: "uvicorn app.server:app --host 0.0.0.0 --port 10000"
+    # --- THIS IS THE FIX ---
+    # This command explicitly tells Uvicorn to listen on the correct host (0.0.0.0)
+    # and to use the specific port number that Render assigns via the $PORT variable.
+    startCommand: "uvicorn app.server:app --host 0.0.0.0 --port $PORT"
     envVars:
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: NEWS_API_KEY
-        sync: false
       - key: PYTHON_VERSION
         value: 3.11
-      # --- THE DEFINITIVE FIX ---
-      # This line tells Python to add the 'src' directory to its list of
-      # places to look for packages. This is how it will find 'my_framework'.
       - key: PYTHONPATH
         value: src
+      - key: OPENAI_API_KEY
+        sync: false # Set in Render Dashboard
+      - key: NEWS_API_KEY
+        sync: false # Set in Render Dashboard
