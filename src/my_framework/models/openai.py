@@ -2,6 +2,7 @@
 
 import os
 from openai import OpenAI
+from openai import Timeout
 from typing import List
 from pydantic import Field, SecretStr, BaseModel, ConfigDict
 from dotenv import load_dotenv
@@ -11,11 +12,12 @@ from ..core.schemas import AIMessage, MessageType
 
 load_dotenv()
 
+# Helper for logging
+def log(message):
+    print(f"   - [openai.py] {message}", flush=True)
+
 class ChatOpenAI(BaseModel, BaseChatModel):
     """A wrapper for the OpenAI Chat Completion API."""
-
-    # All settings are now correctly combined into this single model_config.
-    # The old `class Config:` has been removed.
     model_config = ConfigDict(
         protected_namespaces=(),
         arbitrary_types_allowed=True
@@ -25,24 +27,33 @@ class ChatOpenAI(BaseModel, BaseChatModel):
     temperature: float = 0.7
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
 
-    def _create_client(self):
-        return OpenAI(api_key=self.api_key.get_secret_value())
-
     def invoke(self, input: List[MessageType], config=None) -> AIMessage:
-        client = self._create_client()
+        # Initialize client here
+        client = OpenAI(api_key=self.api_key.get_secret_value(), timeout=Timeout(120.0))
+        
         messages = [msg.model_dump() for msg in input]
-        response = client.chat.completions.create(
-            model=self.model_name,
-            messages=messages,
-            temperature=self.temperature
-        )
-        content = response.choices[0].message.content
-        return AIMessage(content=content or "")
+        
+        log(f"Sending request to OpenAI model '{self.model_name}'...")
+        try:
+            response = client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                temperature=self.temperature
+            )
+            log("Successfully received response from OpenAI.")
+            content = response.choices[0].message.content
+            return AIMessage(content=content or "")
+        except Timeout:
+            log("🔥 OpenAI API call timed out after 120 seconds.")
+            # Return an AIMessage with an error so the process can continue
+            return AIMessage(content='{"error": "AI model timed out"}')
+        except Exception as e:
+            log(f"🔥 An unexpected error occurred during the OpenAI API call: {e}")
+            return AIMessage(content=f'{{"error": "An unexpected error occurred with the AI model: {e}"}}')
+
 
 class OpenAIEmbedding(BaseEmbedding):
     """A wrapper for the OpenAI Embedding API."""
-
-    # The same fix is applied here.
     model_config = ConfigDict(
         protected_namespaces=(),
         arbitrary_types_allowed=True
@@ -50,9 +61,9 @@ class OpenAIEmbedding(BaseEmbedding):
 
     model_name: str = Field(default="text-embedding-3-small", alias="model")
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
-
+    
     def _create_client(self):
-        return OpenAI(api_key=self.api_key.get_secret_value())
+        return OpenAI(api_key=self.api_key.get_secret_value(), timeout=Timeout(120.0))
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         client = self._create_client()
