@@ -3,9 +3,7 @@
 import os
 from openai import OpenAI
 from typing import List
-# --- THIS IS THE FIX ---
 from pydantic import Field, SecretStr, BaseModel, ConfigDict
-# --------------------
 from dotenv import load_dotenv
 
 from .base import BaseChatModel, BaseEmbedding
@@ -16,17 +14,15 @@ load_dotenv()
 class ChatOpenAI(BaseModel, BaseChatModel):
     """A wrapper for the OpenAI Chat Completion API."""
 
-    # --- THIS IS THE FIX ---
-    # We add a model_config to tell Pydantic that 'model_' is not a protected namespace for us.
-    model_config = ConfigDict(protected_namespaces=())
-    # --------------------
+    # All settings are now correctly combined into this single model_config.
+    model_config = ConfigDict(
+        protected_namespaces=(),
+        arbitrary_types_allowed=True
+    )
 
     model_name: str = Field(default="gpt-4o", alias="model")
     temperature: float = 0.7
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
-
-    class Config:
-        arbitrary_types_allowed = True
 
     def _create_client(self):
         return OpenAI(api_key=self.api_key.get_secret_value())
@@ -45,15 +41,14 @@ class ChatOpenAI(BaseModel, BaseChatModel):
 class OpenAIEmbedding(BaseEmbedding):
     """A wrapper for the OpenAI Embedding API."""
 
-    # --- THIS IS THE FIX ---
-    model_config = ConfigDict(protected_namespaces=())
-    # --------------------
+    # The same fix is applied here.
+    model_config = ConfigDict(
+        protected_namespaces=(),
+        arbitrary_types_allowed=True
+    )
 
     model_name: str = Field(default="text-embedding-3-small", alias="model")
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
-
-    class Config:
-        arbitrary_types_allowed = True
 
     def _create_client(self):
         return OpenAI(api_key=self.api_key.get_secret_value())
