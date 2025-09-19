@@ -202,7 +202,55 @@ def post_article_to_cms(
 
         # NOTE: Chrome must be installed in your Render environment.  See
         # the deployment instructions for details.
-        service = Service(ChromeDriverManager().install())
+        # Use a ChromeDriver version that matches the installed Chrome.  In
+        # Render’s environment, the Chrome binary may not be available
+        # system‑wide, so webdriver_manager’s default version (which
+        # downloads the latest driver) can mismatch the actual browser
+        # version.  To avoid "This version of ChromeDriver only supports
+        # Chrome version XX" errors, detect the installed Chrome
+        # version and request the corresponding driver.
+        try:
+            import subprocess
+
+            # Attempt to retrieve the major version number of the installed
+            # Chrome.  The binary_path variable points to the Chrome
+            # executable determined above.  Running `--version` returns
+            # something like "Google Chrome 116.0.5845.96".  We split
+            # this string to extract the major version (e.g. "116").
+            chrome_version_output = subprocess.check_output([
+                binary_path, "--version"
+            ], stderr=subprocess.STDOUT).decode().strip()
+            # The version number is typically the last element in the
+            # space-separated output.  Split on spaces and then on
+            # periods to get the major version.
+            version_parts = chrome_version_output.split()
+            # The actual version string is usually at index 2 for
+            # outputs like "Google Chrome 116.0.5845.96" or index 3
+            # for "Chromium 116.0.5845.96".  Use a fallback if the
+            # expected index is not present.
+            version_str = None
+            for idx in [2, 3]:
+                if idx < len(version_parts) and version_parts[idx][0].isdigit():
+                    version_str = version_parts[idx]
+                    break
+            if version_str:
+                major_version = version_str.split(".")[0]
+            else:
+                major_version = None
+        except Exception:
+            major_version = None
+
+        # Install a ChromeDriver that matches the detected major version.
+        # If we couldn’t determine the version, fall back to the default
+        # behaviour (latest driver), which may still work if the driver
+        # supports the installed Chrome.
+        if major_version:
+            try:
+                service = Service(ChromeDriverManager(version=major_version).install())
+            except Exception:
+                service = Service(ChromeDriverManager().install())
+        else:
+            service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.implicitly_wait(15)
 
