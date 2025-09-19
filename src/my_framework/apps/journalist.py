@@ -16,7 +16,7 @@ from my_framework.agents.utils import (
     select_dropdown_option,
     tick_checkboxes_by_id,
 )
-from my_framework.models.openai import ChatOpenAI
+from my_framework.models.openai import ChatOpenAI, safe_load_json, normalize_article
 from my_framework.agents.tools import tool
 from .scraper import scrape_content
 from .llm_calls import get_initial_draft, get_revised_article, get_seo_metadata
@@ -51,6 +51,14 @@ def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: s
     if "error" in final_json_string:
         return final_json_string
 
+    # Normalise the JSON one more time to ensure it is valid and lists are lists
+    try:
+        parsed = safe_load_json(final_json_string)
+        parsed = normalize_article(parsed)
+        final_json_string = json.dumps(parsed)
+    except Exception:
+        pass
+
     log("✅ TOOL 1: Finished successfully.")
     return final_json_string
 
@@ -78,12 +86,16 @@ def post_article_to_cms(
         log(error_message)
         return json.dumps({"error": error_message})
 
+    # Try strict JSON parse first; fall back to safe_load_json if needed
     try:
         article_content = json.loads(article_json_string)
-    except json.JSONDecodeError as exc:
-        error_message = f"Invalid article JSON supplied: {exc}"
-        log(error_message)
-        return json.dumps({"error": error_message})
+    except json.JSONDecodeError:
+        try:
+            article_content = safe_load_json(article_json_string)
+        except Exception as exc:
+            error_message = f"Invalid article JSON supplied: {exc}"
+            log(error_message)
+            return json.dumps({"error": error_message})
 
     if not isinstance(article_content, dict):
         error_message = "Article payload must be a JSON object."
@@ -150,6 +162,8 @@ def post_article_to_cms(
         else:
             log("Running Chrome with UI (non-headless).")
 
+        # NOTE: Chrome must be installed in your Render environment.  See
+        # the deployment instructions for details.
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.implicitly_wait(15)

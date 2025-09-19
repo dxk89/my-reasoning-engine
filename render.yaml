@@ -1,18 +1,37 @@
 # render.yaml
 
+# This Render configuration defines a single web service for the
+# my‑reasoning‑engine application.  It installs Google Chrome into
+# Render’s persistent storage during the build step so that Selenium
+# can locate a browser binary at runtime.  The start command adds
+# Chrome’s location to the PATH and then launches the application via
+# uvicorn.
+
 services:
   - type: web
     name: my-reasoning-engine
     env: python
     plan: free
-    buildCommand: "pip install -r requirements.txt"
-    # --- THIS IS THE FIX ---
-    # The start command now runs our connection test script directly.
-    startCommand: "python examples/test_openai_connection.py"
+    # Install Chrome and dependencies before running pip install.
+    # The render-build.sh script will download Google Chrome into the
+    # persistent storage directory (.render/chrome) and cache it so
+    # subsequent builds are faster.
+    buildCommand: |
+      # Install Chrome into persistent storage if not already cached
+      bash render-build.sh
+      # Install Python dependencies
+      pip install -r requirements.txt
+    # Prepend Chrome’s location to the PATH before launching the app.
+    # This allows Selenium to find the chrome binary without needing to
+    # hardcode a path in your Python code.  uvicorn is used here to run
+    # the FastAPI application defined in app.server.
+    startCommand: |
+      export PATH="${PATH}:/opt/render/project/.render/chrome/opt/google/chrome"
+      uvicorn app.server:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: OPENAI_API_KEY
         sync: false
       - key: PYTHON_VERSION
-        value: 3.11
+        value: "3.11"
       - key: PYTHONPATH
         value: src

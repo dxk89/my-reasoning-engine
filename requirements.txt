@@ -1,3 +1,4 @@
+
 # requirements.txt
 
 # Core web framework
@@ -20,8 +21,9 @@ tiktoken
 python-dotenv
 pytz
 
-# The following were in your original file but may not be strictly necessary
-# if you are only running the FastAPI app. I'm keeping them for completeness.
+# The following were in the original file but may not be strictly
+# necessary if you are only running the FastAPI app.  They are
+# included here to remain compatible with the existing codebase.
 aiofiles==23.2.1
 anyio==3.7.1
 certifi==2023.7.22
