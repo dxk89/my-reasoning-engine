@@ -7,15 +7,17 @@ services:
       bash render-build.sh
       pip install -r requirements.txt
     startCommand: |
+      echo "--- Shell Environment Variables ---"
+      env | sort # This will print all environment variables to the log
+      echo "---------------------------------"
+      
       echo "--- Starting Gunicorn Server ---"
-      # The environment variables are now set in envVars, so we just start the server.
       gunicorn app.server:app --bind 0.0.0.0:$PORT --timeout 180 --workers 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: RENDER
         value: "true"
-      # --- THIS IS THE FIX ---
       # Set the paths directly in the environment.
       - key: GOOGLE_CHROME_BIN
         value: /opt/render/project/.render/chrome/chrome-linux64/chrome

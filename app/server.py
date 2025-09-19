@@ -3,6 +3,16 @@
 from fastapi import FastAPI, HTTPException
 import threading
 import json
+import os # <-- Import os
+import pprint # <-- Import pprint for clean printing
+
+# --- DIAGNOSTIC CODE START ---
+# Print all environment variables visible to the Python app
+print("--- Python Application Environment Variables ---")
+pprint.pprint(dict(os.environ))
+print("----------------------------------------------")
+# --- DIAGNOSTIC CODE END ---
+
 
 from my_framework.apps.journalist import generate_article_and_metadata, post_article_to_cms
 
@@ -43,12 +53,10 @@ def journalist_workflow(config_data: dict):
             
             article_data = json.loads(article_json_string)
             
-            # --- THIS IS THE NEW, ROBUST CHECK ---
             if 'error' in article_data:
                 print(f"   - 🔥 Error from generation tool. Halting process for this article.")
                 print(f"   - 🔥 Reason: {article_data['error']}")
-                continue # This skips to the next article in the loop
-            # ------------------------------------
+                continue 
                 
             print("   - ✅ Smart article generation successful. Proceeding to post.")
 
@@ -56,7 +64,6 @@ def journalist_workflow(config_data: dict):
             print(f"   - 🔥 A critical error occurred during generation: {e}")
             continue
 
-        # This block will now ONLY run if the generation above was successful
         try:
             print("   - Calling 'post_article_to_cms' tool...")
             post_result = post_article_to_cms.run(
