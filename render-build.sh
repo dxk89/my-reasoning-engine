@@ -75,7 +75,7 @@ if [[ ! -f "$STORAGE_DIR/chromedriver/chromedriver" ]]; then
   # chromedriver-linux64.zip as a release asset.  If this fails, the
   # build will exit with an error.  The -L option follows redirects.
   wget -q -O chromedriver-linux64.zip \
-    https://github.com/dxk89/my-reasoning-engine/releases/download/v1.0/chromedriver-linux64.zip
+    https://github.com/dxk89/my-reasoning-engine/releases/download/v2.0/chromedriver-linux64.zip
   if [[ $? -eq 0 ]]; then
     echo "...Extracting ChromeDriver"
     unzip -q chromedriver-linux64.zip
