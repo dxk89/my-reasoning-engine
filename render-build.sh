@@ -18,19 +18,36 @@ STORAGE_DIR="/opt/render/project/.render"
 # contains a portable, headless Chrome binary that doesn’t require
 # installation.  After extraction, the binary will live under
 # "$STORAGE_DIR/chrome/chrome-linux64/chrome".
-if [[ ! -d "$STORAGE_DIR/chrome/chrome-linux64" ]]; then
-  echo "...Downloading Chrome for Testing"
+if [[ ! -d "$STORAGE_DIR/chrome/chrome-linux64" && ! -d "$STORAGE_DIR/chrome/opt/google/chrome" ]]; then
+  echo "...Installing Chrome"
   mkdir -p "$STORAGE_DIR/chrome"
   cd "$STORAGE_DIR/chrome"
-  # Fetch the latest Chrome for Testing release; see
-  # https://developer.chrome.com/docs/chrome-for-testing
-  # We use a direct download of the latest linux64 archive. If this
-  # fails for any reason (e.g. network issues), the build will exit
-  # immediately due to 'set -o errexit'.
-  wget -q -O chrome-linux64.zip \
-    https://storage.googleapis.com/chrome-for-testing-public/latest/linux64/chrome-linux64.zip
-  unzip -q chrome-linux64.zip
-  rm chrome-linux64.zip
+  # First try to download Chrome for Testing (zip).  If this fails,
+  # fallback to the .deb package.  Either method will exit on failure
+  # because of 'set -o errexit'.
+  set +o errexit
+  wget -q -O chrome-linux64.zip https://storage.googleapis.com/chrome-for-testing-public/latest/linux64/chrome-linux64.zip
+  if [[ $? -eq 0 ]]; then
+    echo "...Extracting Chrome for Testing"
+    unzip -q chrome-linux64.zip
+    rm chrome-linux64.zip
+    set -o errexit
+  else
+    echo "...Failed to download Chrome for Testing. Falling back to .deb installation"
+    rm -f chrome-linux64.zip
+    set -o errexit
+    wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+    # Extract the .deb package without installing system‑wide.  The
+    # binary will end up under opt/google/chrome/google-chrome.
+    # Extract the .deb package without using dpkg -x (which can fail with EOF
+    # errors on some systems).  We use ar to extract the data archive, then
+    # untar it into the storage directory.  This creates
+    # $STORAGE_DIR/chrome/opt/google/chrome/google-chrome.
+    ar x google-chrome-stable_current_amd64.deb
+    tar -xf data.tar.* -C "$STORAGE_DIR/chrome"
+    # Clean up temporary files
+    rm google-chrome-stable_current_amd64.deb control.tar.* data.tar.* debian-binary
+  fi
   cd "$HOME/project/src" || true
 else
   echo "...Using cached Chrome"

@@ -28,9 +28,20 @@ services:
     # uvicorn is used here to run the FastAPI application defined in
     # app.server.
     startCommand: |
-      # Point Selenium to the installed Chrome binary and ensure it is in PATH.
-      export GOOGLE_CHROME_BIN="/opt/render/project/.render/chrome/chrome-linux64/chrome"
-      export PATH="${PATH}:/opt/render/project/.render/chrome/chrome-linux64"
+      # Dynamically locate the Chrome binary within the persistent
+      # storage.  The build script may install Chrome via either a
+      # Chrome‑for‑Testing zip or a .deb package.  We search for
+      # 'chrome' or 'google-chrome' under the `.render/chrome` tree and
+      # export the path accordingly.  This makes the startup script
+      # resilient to changes in the installation method.
+      CHROME_PATH=$(find /opt/render/project/.render/chrome -type f \( -name 'chrome' -o -name 'google-chrome' \) -print -quit)
+      if [ -z "$CHROME_PATH" ]; then
+        echo "❌ No Chrome binary found under .render/chrome. Exiting." >&2
+        exit 1
+      fi
+      export GOOGLE_CHROME_BIN="$CHROME_PATH"
+      export PATH="${PATH}:$(dirname "$CHROME_PATH")"
+      echo "✅ Using Chrome binary at $GOOGLE_CHROME_BIN"
       # Launch the FastAPI app via uvicorn
       uvicorn app.server:app --host 0.0.0.0 --port $PORT
     envVars:

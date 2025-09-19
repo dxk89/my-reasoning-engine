@@ -73,12 +73,13 @@ def post_article_to_cms(
     """
     Logs into the CMS and submits an article using browser automation.
     This function uses Selenium to automate the browser. It requires that a Chrome
-    binary be installed in the Render environment. The `render-build.sh` script
-    installs Chrome into `/opt/render/project/.render/chrome/opt/google/chrome`.
-    The start command in `render.yaml` should set the `GOOGLE_CHROME_BIN`
-    environment variable to point to the Chrome binary and add its directory
-    to the PATH. If the environment variable is set, the Chrome driver will
-    automatically pick it up; otherwise, we fall back to the default path.
+    binary be installed in the Render environment.  The `render-build.sh` script
+    downloads either a portable Chrome‑for‑Testing archive or falls back to the
+    Google Chrome `.deb` package and extracts it into the `.render/chrome` directory.
+    At startup, the service dynamically locates the Chrome binary under that
+    directory and exports `GOOGLE_CHROME_BIN` and updates `PATH`.  If for some
+    reason the environment variable is not set, this function will attempt to
+    use a sensible default path.  See render.yaml for details.
     """
 
     log("🤖 TOOL 2: Starting CMS Posting...")
@@ -169,10 +170,23 @@ def post_article_to_cms(
         # The environment variable GOOGLE_CHROME_BIN can override this
         # default.  If neither is set, we fall back to the older
         # google-chrome path for backwards compatibility.
-        binary_path = os.environ.get(
-            "GOOGLE_CHROME_BIN",
-            "/opt/render/project/.render/chrome/chrome-linux64/chrome"
-        )
+        # Determine the path to the Chrome binary.  First, prefer any
+        # path provided via the environment variable.  If it is not set
+        # or does not point to an existing file, try a handful of
+        # common fallback locations used by our build script.  Finally,
+        # if none of these exist, leave binary_location unset and
+        # rely on Chromedriver’s default discovery (which will likely
+        # fail with a helpful error message).
+        binary_path = os.environ.get("GOOGLE_CHROME_BIN")
+        if not binary_path or not os.path.isfile(binary_path):
+            candidates = [
+                "/opt/render/project/.render/chrome/chrome-linux64/chrome",
+                "/opt/render/project/.render/chrome/opt/google/chrome/google-chrome",
+            ]
+            for candidate in candidates:
+                if os.path.isfile(candidate):
+                    binary_path = candidate
+                    break
         if binary_path:
             chrome_options.binary_location = binary_path
 
