@@ -1,8 +1,19 @@
 # File: my_framework/app/server.py
+from dotenv import load_dotenv
+load_dotenv() # This line is critical: it loads the .env file created by the build script.
 
 from fastapi import FastAPI, HTTPException
 import threading
 import json
+import os
+import pprint
+
+# --- Diagnostic Code ---
+# This will print all the environment variables that the Python app can see.
+# After this fix, you should see GOOGLE_CHROME_BIN in this list.
+print("--- Python Application Environment Variables ---")
+pprint.pprint(dict(os.environ))
+print("----------------------------------------------")
 
 from my_framework.apps.journalist import generate_article_and_metadata, post_article_to_cms
 
@@ -43,12 +54,10 @@ def journalist_workflow(config_data: dict):
             
             article_data = json.loads(article_json_string)
             
-            # --- THIS IS THE NEW, ROBUST CHECK ---
             if 'error' in article_data:
                 print(f"   - 🔥 Error from generation tool. Halting process for this article.")
                 print(f"   - 🔥 Reason: {article_data['error']}")
-                continue # This skips to the next article in the loop
-            # ------------------------------------
+                continue
                 
             print("   - ✅ Smart article generation successful. Proceeding to post.")
 
@@ -56,7 +65,6 @@ def journalist_workflow(config_data: dict):
             print(f"   - 🔥 A critical error occurred during generation: {e}")
             continue
 
-        # This block will now ONLY run if the generation above was successful
         try:
             print("   - Calling 'post_article_to_cms' tool...")
             post_result = post_article_to_cms.run(

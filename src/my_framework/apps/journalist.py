@@ -23,9 +23,7 @@ def log(message):
 
 @tool
 def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: str, api_key: str) -> str:
-    """
-    Generates a complete, fact-checked, and SEO-optimized article with metadata.
-    """
+    # ... (this function is correct and does not need changes)
     log("🤖 TOOL 1: Starting multi-step article generation process...")
     source_content = scrape_content(source_url)
     if isinstance(source_content, dict) and "error" in source_content:
@@ -48,6 +46,7 @@ def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: s
         pass
     log("✅ TOOL 1: Finished successfully.")
     return final_json_string
+
 
 @tool
 def post_article_to_cms(
@@ -72,21 +71,16 @@ def post_article_to_cms(
 
     driver = None
     try:
-        # --- Simplified Selenium Setup ---
         chrome_options = webdriver.ChromeOptions()
         
         binary_path = os.environ.get("GOOGLE_CHROME_BIN")
         driver_path = os.environ.get("CHROMEDRIVER_PATH")
 
-        if not binary_path or not os.path.isfile(binary_path):
-            error_msg = f"Chrome binary not found. GOOGLE_CHROME_BIN='{binary_path}'"
-            log(f"   - 🔥 {error_msg}")
-            return json.dumps({"error": error_msg})
+        if not binary_path:
+            return json.dumps({"error": "Chrome binary not found. GOOGLE_CHROME_BIN is 'None' or not set."})
         
-        if not driver_path or not os.path.isfile(driver_path):
-            error_msg = f"ChromeDriver not found. CHROMEDRIVER_PATH='{driver_path}'"
-            log(f"   - 🔥 {error_msg}")
-            return json.dumps({"error": error_msg})
+        if not driver_path:
+             return json.dumps({"error": "ChromeDriver not found. CHROMEDRIVER_PATH is 'None' or not set."})
 
         chrome_options.binary_location = binary_path
         service = Service(executable_path=driver_path)
@@ -97,8 +91,6 @@ def post_article_to_cms(
 
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.implicitly_wait(20)
-        
-        # --- End Selenium Setup ---
         
         log(f"Navigating to login URL: {login_url}")
         driver.get(login_url)
@@ -113,7 +105,7 @@ def post_article_to_cms(
         driver.get(add_article_url)
         time.sleep(3)
         
-        # ... (rest of your form-filling logic)
+        # ... (rest of form-filling logic) ...
 
         driver.find_element(By.ID, save_button_id).click()
         time.sleep(10)
