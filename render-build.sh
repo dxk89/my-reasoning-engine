@@ -26,7 +26,13 @@ if [[ ! -d "$STORAGE_DIR/chrome/chrome-linux64" && ! -d "$STORAGE_DIR/chrome/opt
   # fallback to the .deb package.  Either method will exit on failure
   # because of 'set -o errexit'.
   set +o errexit
-  wget -q -O chrome-linux64.zip https://storage.googleapis.com/chrome-for-testing-public/latest/linux64/chrome-linux64.zip
+  # Download a specific stable version of Chrome for Testing.  See
+  # https://googlechromelabs.github.io/chrome-for-testing/ for the
+  # latest available versions.  We pin to version 140.0.7339.185 for
+  # stability.  If this download fails, we fall back to installing
+  # from the .deb package.
+  wget -q -O chrome-linux64.zip \
+    https://storage.googleapis.com/chrome-for-testing-public/140.0.7339.185/linux64/chrome-linux64.zip
   if [[ $? -eq 0 ]]; then
     echo "...Extracting Chrome for Testing"
     unzip -q chrome-linux64.zip
