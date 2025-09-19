@@ -1,39 +1,28 @@
 services:
   - type: web
-    name: my-flask-app          # change to whatever you want your service to be called
+    name: my-flask-app
     env: python
-    plan: free                 # or starter, standard, etc.
-    # First run our build script to install Chrome into the
-    # persistent storage area, then install Python dependencies.
+    plan: free
     buildCommand: |
       bash render-build.sh
-      pip install -r requirements.txt
-    # The start command locates the Chrome binary installed during
-    # build and exports the appropriate environment variables before
-    # starting the Flask application with gunicorn.  If Chrome
-    # cannot be found, the command fails to make the error obvious.
     startCommand: |
-      # Find the Chrome binary under .render/chrome.  Use the first
-      # match found.  The build script extracts Chrome either to
-      # chrome-linux64/chrome or opt/google/chrome/google-chrome.
-      CHROME_BIN=$(find /opt/render/project/.render/chrome -type f -perm -u+x -name "chrome" -o -name "google-chrome" | head -n 1)
+      # Read the Chrome binary path from the file saved during build
+      CHROME_BIN=$(cat /opt/render/project/.render/.render-chrome-path)
       if [ -z "$CHROME_BIN" ]; then
-        echo "Chrome binary not found under /opt/render/project/.render/chrome" >&2
+        echo "Chrome binary path not found in .render-chrome-path" >&2
         exit 1
       fi
       export GOOGLE_CHROME_BIN="$CHROME_BIN"
       export PATH="$PATH:$(dirname "$CHROME_BIN")"
-      # Locate the matching ChromeDriver binary downloaded during build.  The
-      # driver is extracted into /opt/render/project/.render/chromedriver.
-      CHROME_DRIVER=$(find /opt/render/project/.render/chromedriver -type f -perm -u+x -name "chromedriver" | head -n 1)
-      if [ -n "$CHROME_DRIVER" ]; then
+      
+      # Set the ChromeDriver path
+      CHROME_DRIVER="/opt/render/project/.render/chromedriver/chromedriver"
+      if [ -f "$CHROME_DRIVER" ]; then
         export CHROMEDRIVER_PATH="$CHROME_DRIVER"
       fi
-      # Indicate to the Python code that it is running on Render.
+      
       export RENDER="true"
-      # Start the Flask application using gunicorn.  Increase the
-      # timeout to accommodate long-running Selenium tasks.
-      gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1
+      gunicorn app.server:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.9          # optional, but keeps your Python version consistent
+        value: 3.11.9
