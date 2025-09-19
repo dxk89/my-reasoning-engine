@@ -1,5 +1,3 @@
-# File: src/my_framework/apps/journalist.py
-
 import json
 import os
 import time
@@ -72,7 +70,16 @@ def post_article_to_cms(
     add_article_url: str,
     save_button_id: str,
 ) -> str:
-    """Logs into the CMS and submits an article using browser automation."""
+    """
+    Logs into the CMS and submits an article using browser automation.
+    This function uses Selenium to automate the browser. It requires that a Chrome
+    binary be installed in the Render environment. The `render-build.sh` script
+    installs Chrome into `/opt/render/project/.render/chrome/opt/google/chrome`.
+    The start command in `render.yaml` should set the `GOOGLE_CHROME_BIN`
+    environment variable to point to the Chrome binary and add its directory
+    to the PATH. If the environment variable is set, the Chrome driver will
+    automatically pick it up; otherwise, we fall back to the default path.
+    """
 
     log("🤖 TOOL 2: Starting CMS Posting...")
 
@@ -152,6 +159,17 @@ def post_article_to_cms(
 
     try:
         chrome_options = webdriver.ChromeOptions()
+        # If a chrome binary location is provided, set it.  This allows
+        # Selenium to find the chrome executable when it is not installed
+        # system-wide.  The start command in render.yaml should set
+        # GOOGLE_CHROME_BIN to the full path of the installed chrome.
+        binary_path = os.environ.get(
+            "GOOGLE_CHROME_BIN",
+            "/opt/render/project/.render/chrome/opt/google/chrome/google-chrome"
+        )
+        if binary_path:
+            chrome_options.binary_location = binary_path
+
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
         if is_headless or os.environ.get("HEADLESS_CHROME"):
