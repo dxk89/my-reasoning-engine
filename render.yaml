@@ -1,53 +1,34 @@
-# render.yaml
-
-# This Render configuration defines a single web service for the
-# my‑reasoning‑engine application.  It installs Google Chrome into
-# Render’s persistent storage during the build step so that Selenium
-# can locate a browser binary at runtime.  The start command adds
-# Chrome’s location to the PATH and then launches the application via
-# uvicorn.
-
 services:
   - type: web
-    name: my-reasoning-engine
+    name: my-flask-app          # change to whatever you want your service to be called
     env: python
-    plan: free
-    # Install Chrome and dependencies before running pip install.
-    # The render-build.sh script will download Google Chrome into the
-    # persistent storage directory (.render/chrome) and cache it so
-    # subsequent builds are faster.
+    plan: free                 # or starter, standard, etc.
+    # Install Chrome in the build step and then install Python dependencies.
     buildCommand: |
-      # Install Chrome into persistent storage if not already cached
       bash render-build.sh
-      # Install Python dependencies
       pip install -r requirements.txt
-    # Prepend Chrome’s location to the PATH before launching the app.
-    # We set GOOGLE_CHROME_BIN to the portable Chrome binary extracted
-    # during the build step.  We also extend the PATH so that
-    # webdriver-manager and other tooling can locate the executable.
-    # uvicorn is used here to run the FastAPI application defined in
-    # app.server.
+    # The start command locates the installed Chrome binary under
+    # `.render/chrome` at runtime and exports it so that Selenium can
+    # find it.  If no Chrome binary is found, the command exits with
+    # a non‑zero status to make the failure obvious.  After setting
+    # the environment variables, the FastAPI application is started
+    # using uvicorn.  Adjust the module path (`app:app`) if your
+    # application’s entry point differs.
     startCommand: |
-      # Dynamically locate the Chrome binary within the persistent
-      # storage.  The build script may install Chrome via either a
-      # Chrome‑for‑Testing zip or a .deb package.  We search for
-      # 'chrome' or 'google-chrome' under the `.render/chrome` tree and
-      # export the path accordingly.  This makes the startup script
-      # resilient to changes in the installation method.
-      CHROME_PATH=$(find /opt/render/project/.render/chrome -type f \( -name 'chrome' -o -name 'google-chrome' \) -print -quit)
-      if [ -z "$CHROME_PATH" ]; then
-        echo "❌ No Chrome binary found under .render/chrome. Exiting." >&2
+      # Locate the Chrome binary installed during the build.  The
+      # `find` command looks for a file named 'chrome' within the
+      # `.render/chrome` directory.  If no binary is found, exit.
+      CHROME_BIN="$(find /opt/render/project/.render/chrome -type f -name chrome | head -n 1)"
+      if [ -z "$CHROME_BIN" ]; then
+        echo "Chrome binary not found under .render/chrome" >&2
         exit 1
       fi
-      export GOOGLE_CHROME_BIN="$CHROME_PATH"
-      export PATH="${PATH}:$(dirname "$CHROME_PATH")"
-      echo "✅ Using Chrome binary at $GOOGLE_CHROME_BIN"
-      # Launch the FastAPI app via uvicorn
+      export GOOGLE_CHROME_BIN="$CHROME_BIN"
+      export PATH="$PATH:$(dirname "$CHROME_BIN")"
+      # Start the app.  Replace 'app.server:app' with your actual
+      # module path if different.
       uvicorn app.server:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: OPENAI_API_KEY
-        sync: false
+      # Pin the Python version for reproducible builds.  Adjust as needed.
       - key: PYTHON_VERSION
-        value: "3.11"
-      - key: PYTHONPATH
-        value: src
+        value: 3.11.9
