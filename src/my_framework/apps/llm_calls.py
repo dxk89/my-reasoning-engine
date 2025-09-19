@@ -52,30 +52,34 @@ def get_revised_article(llm: ChatOpenAI, source_content: str, draft_article: str
 
 def get_seo_metadata(llm: ChatOpenAI, revised_article: str) -> str:
     """
-    Generates SEO metadata and formats the final output.  It ensures that the
-    returned value is a valid JSON string with the required keys, stripping
-    any extra text the model might add.
+    Generates comprehensive SEO and CMS metadata and formats the final output.
+    This is the corrected and expanded version.
     """
     log("-> Building prompt for SEO optimization and JSON formatting.")
     seo_prompt = [
-        SystemMessage(content="You are an SEO expert and content strategist. Your task is to take a final article and "
-                              "prepare it for publishing by creating a title and all necessary SEO metadata. Format the "
+        SystemMessage(content="You are an expert sub-editor and content strategist for intellinews.com. Your task is to take a final article and "
+                              "prepare it for publishing by creating a title and all necessary CMS and SEO metadata. Format the "
                               "entire output as a single, valid JSON object."),
         HumanMessage(content=f"""
-        Based on the following article, please perform these tasks:
-        1. Create a concise, compelling, SEO-friendly title.
-        2. Create a concise, engaging SEO meta description (155 characters max).
-        3. Generate a list of relevant SEO keywords as a comma-separated string.
-        4. Generate a list of 3-5 relevant social media hashtags (e.g., ["#Slovenia", "#Aviation"]).
+        Based on the following article, please perform these tasks and return a single JSON object with the specified keys:
 
         ARTICLE:
         ---
         {revised_article}
         ---
 
-        Return a single JSON object with the following keys: "title" (string), "body" (string, which is the full revised
-        article HTML-formatted with tags), "seo_description" (string), "seo_keywords" (string), and "hashtags" (array of 
-        strings).
+        JSON OUTPUT REQUIREMENTS:
+        1.  "title": Create a concise, compelling, SEO-friendly title for the article.
+        2.  "body": The full revised article, formatted with HTML paragraph tags (`<p>`).
+        3.  "seo_description": A concise, engaging SEO meta description (155 characters max).
+        4.  "seo_keywords": A comma-separated string of relevant SEO keywords.
+        5.  "hashtags": An array of 3-5 relevant social media hashtags (e.g., ["#Slovenia", "#Aviation"]).
+        6.  "weekly_title_value": A very short, punchy title suitable for a weekly newsletter.
+        7.  "website_callout_value": A brief, attention-grabbing callout for the website's front page.
+        8.  "social_media_callout_value": A short, engaging phrase for social media posts.
+        9.  "abstract_value": A concise summary of the article's content (150 characters max).
+        10. "daily_subject_value": Choose ONE category that best fits: "Macroeconomic News", "Banking And Finance", "Companies and Industries", or "Political".
+        11. "key_point_value": Based on the article's importance, choose ONE: "Yes" or "No".
         """)
     ]
     log("-> Sending request to LLM for final SEO and formatting...")
@@ -84,14 +88,6 @@ def get_seo_metadata(llm: ChatOpenAI, revised_article: str) -> str:
         log(f"-> 🔥 LLM returned an error: {final_response.content}")
         return final_response.content
 
-    # Clean up the response to extract only the JSON object and normalise fields
-    try:
-        parsed = safe_load_json(final_response.content)
-        parsed = normalize_article(parsed)
-        final_json_string = json.dumps(parsed)
-    except Exception:
-        # If parsing fails, fall back to returning the raw content
-        final_json_string = final_response.content
-
+    final_json_string = final_response.content
     log("-> Final JSON object received.")
     return final_json_string
