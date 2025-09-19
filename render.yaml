@@ -1,25 +1,27 @@
 services:
   - type: web
-    name: my-reasoning-engine # Updated name for clarity
+    name: my-reasoning-engine
     env: python
     plan: free
     buildCommand: |
       bash render-build.sh
       pip install -r requirements.txt
     startCommand: |
-      # Read the exact paths saved by the build script
-      CHROME_BIN=$(cat /opt/render/project/.render/.render-chrome-path)
-      CHROME_DRIVER=$(cat /opt/render/project/.render/.render-chromedriver-path)
+      # Directly set the paths that are known from the build script
+      CHROME_BIN="/opt/render/project/.render/chrome/chrome-linux64/chrome"
+      CHROME_DRIVER="/opt/render/project/.render/chromedriver/chromedriver"
 
       # Export the environment variables for the Python script
       export GOOGLE_CHROME_BIN="$CHROME_BIN"
       export CHROMEDRIVER_PATH="$CHROME_DRIVER"
+      
+      # Add the directories to the system's PATH
       export PATH="$PATH:$(dirname "$CHROME_BIN"):$(dirname "$CHROME_DRIVER")"
       export RENDER="true"
       
       echo "--- Starting Gunicorn Server ---"
-      echo "Chrome Binary Path: $GOOGLE_CHROME_BIN"
-      echo "ChromeDriver Path: $CHROMEDRIVER_PATH"
+      echo "GOOGLE_CHROME_BIN is set to: $GOOGLE_CHROME_BIN"
+      echo "CHROMEDRIVER_PATH is set to: $CHROMEDRIVER_PATH"
       
       gunicorn app.server:app --bind 0.0.0.0:$PORT --timeout 180 --workers 1
     envVars:
