@@ -1,28 +1,27 @@
 services:
   - type: web
-    name: my-flask-app
+    name: my-reasoning-engine # Updated name for clarity
     env: python
     plan: free
     buildCommand: |
       bash render-build.sh
+      pip install -r requirements.txt
     startCommand: |
-      # Read the Chrome binary path from the file saved during build
+      # Read the exact paths saved by the build script
       CHROME_BIN=$(cat /opt/render/project/.render/.render-chrome-path)
-      if [ -z "$CHROME_BIN" ]; then
-        echo "Chrome binary path not found in .render-chrome-path" >&2
-        exit 1
-      fi
+      CHROME_DRIVER=$(cat /opt/render/project/.render/.render-chromedriver-path)
+
+      # Export the environment variables for the Python script
       export GOOGLE_CHROME_BIN="$CHROME_BIN"
-      export PATH="$PATH:$(dirname "$CHROME_BIN")"
-      
-      # Set the ChromeDriver path
-      CHROME_DRIVER="/opt/render/project/.render/chromedriver/chromedriver"
-      if [ -f "$CHROME_DRIVER" ]; then
-        export CHROMEDRIVER_PATH="$CHROME_DRIVER"
-      fi
-      
+      export CHROMEDRIVER_PATH="$CHROME_DRIVER"
+      export PATH="$PATH:$(dirname "$CHROME_BIN"):$(dirname "$CHROME_DRIVER")"
       export RENDER="true"
-      gunicorn app.server:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1
+      
+      echo "--- Starting Gunicorn Server ---"
+      echo "Chrome Binary Path: $GOOGLE_CHROME_BIN"
+      echo "ChromeDriver Path: $CHROMEDRIVER_PATH"
+      
+      gunicorn app.server:app --bind 0.0.0.0:$PORT --timeout 180 --workers 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
