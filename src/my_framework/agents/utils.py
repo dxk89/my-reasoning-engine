@@ -753,8 +753,8 @@ INDUSTRY_MAP = {
     "Wireless Telecommunication Services": "edit-field-industry-und-0-2768-2768-children-455-455-children-480-480-children-546-546",
     "Wireless Telecommunication Services": "edit-field-industry-und-0-2768-2768-children-455-455-children-480-480-children-546-546-children-711-711",
     "Data": "edit-field-industry-und-0-2787-2787",
-    "Macro Data": "edit-field-industry-und-0-2768-2768-children-2788-2788",
-    "Statistical Data": "edit-field-industry-und-0-2768-2768-children-2789-2789",
+    "Macro Data": "edit-field-industry-und-0-2787-2787-children-2788-2788",
+    "Statistical Data": "edit-field-industry-und-0-2787-2787-children-2789-2789",
     "Health care & Pharmaceuticals": "edit-field-industry-und-0-450-450",
     "Health Care Equipment & Services": "edit-field-industry-und-0-450-450-children-471-471",
     "Health Care Equipment & Supplies": "edit-field-industry-und-0-450-450-children-471-471-children-521-521",
@@ -835,7 +835,7 @@ def get_metadata_prompt(article_title, article_body):
     """Creates the prompt for the more creative metadata fields."""
     return f"""
     You are an expert sub-editor. Your response must be ONLY a valid JSON object.
-    Based on the article, fill in the metadata using these keys: "weekly_title_value", "website_callout_value", "social_media_callout_value", "hashtags_value", "seo_title_value", "seo_description_value", "seo_keywords_value", "abstract_value", "google_news_keywords_value", "daily_subject_value", "key_point_value".
+    Based on the article, fill in the metadata using these keys: "weekly_title_value", "website_callout_value", "social_media_callout_value", "hashtags_value", "seo_title_value", "seo_description_value", "seo_keywords_value", "abstract_value", "google_news_keywords_value", "daily_subject_value", "key_point_value", "machine_written_value", "byline_value", "ballot_box_value", "africa_daily_section_value", "southeast_europe_today_sections_value", "cee_news_watch_country_sections_value", "n_africa_today_section_value", "middle_east_today_section_value", "baltic_states_today_sections_value", "asia_today_sections_value", "latam_today_value".
 
     RULES:
     - "abstract_value" should be a concise summary of the page's content, preferably 150 characters or less.
@@ -843,6 +843,10 @@ def get_metadata_prompt(article_title, article_body):
     - "google_news_keywords_value" should be a single string of comma-separated keywords.
     - "daily_subject_value": Choose ONE from ["Macroeconomic News", "Banking And Finance", "Companies and Industries", "Political"]
     - "key_point_value": Choose ONE from ["Yes", "No"].
+    - "machine_written_value": Choose ONE from ["Yes", "No"].
+    - "ballot_box_value": Choose ONE from ["Yes", "No"].
+    - "byline_value": Enter the author's name, or "staff writer" if not available.
+    - For all section fields (e.g., "africa_daily_section_value"), choose the most relevant section from the available options if the article pertains to that region.
 
     ARTICLE FOR ANALYSIS:
     Article Title: "{article_title}"
