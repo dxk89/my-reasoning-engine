@@ -1,6 +1,6 @@
 # File: src/my_framework/apps/llm_calls.py
 
-from my_framework.models.openai import ChatOpenAI
+from my_framework.models.openai import ChatOpenAI, safe_load_json, normalize_article
 from my_framework.core.schemas import SystemMessage, HumanMessage
 import json
 
@@ -13,8 +13,11 @@ def get_initial_draft(llm: ChatOpenAI, user_prompt: str, source_content: str) ->
     """
     log("-> Building prompt for initial draft.")
     draft_prompt = [
-        SystemMessage(content="You are an expert journalist. Your task is to write a professional, insightful, and objective article based on the user's prompt and the provided source content. Focus on financial, business, and political analysis of emerging markets."),
-        HumanMessage(content=f"USER PROMPT: \"{user_prompt}\"\n\nSOURCE CONTENT:\n---\n{source_content}\n---\n\nWrite the initial draft of the article now.")
+        SystemMessage(content="You are an expert journalist. Your task is to write a professional, insightful, and "
+                              "objective article based on the user's prompt and the provided source content. Focus on "
+                              "financial, business, and political analysis of emerging markets."),
+        HumanMessage(content=f"USER PROMPT: \"{user_prompt}\"\n\nSOURCE CONTENT:\n---\n{source_content}\n---\n\nWrite "
+                             "the initial draft of the article now.")
     ]
     log("-> Sending request to LLM for initial draft...")
     draft_response = llm.invoke(draft_prompt)
@@ -31,8 +34,12 @@ def get_revised_article(llm: ChatOpenAI, source_content: str, draft_article: str
     """
     log("-> Building prompt for fact-checking and stylistic improvements.")
     revision_prompt = [
-        SystemMessage(content="You are a meticulous editor for intellinews.com. Your task is to review a draft article. First, ensure every claim is fully supported by the provided SOURCE CONTENT, correcting any inaccuracies. Second, refine the writing to match the professional, insightful, and objective style of intellinews.com."),
-        HumanMessage(content=f"SOURCE CONTENT:\n---\n{source_content}\n---\n\nDRAFT ARTICLE:\n---\n{draft_article}\n---\n\nPlease provide the revised, fact-checked, and stylistically improved article.")
+        SystemMessage(content="You are a meticulous editor for intellinews.com. Your task is to review a draft article. "
+                              "First, ensure every claim is fully supported by the provided SOURCE CONTENT, correcting "
+                              "any inaccuracies. Second, refine the writing to match the professional, insightful, and "
+                              "objective style of intellinews.com."),
+        HumanMessage(content=f"SOURCE CONTENT:\n---\n{source_content}\n---\n\nDRAFT ARTICLE:\n---\n{draft_article}\n---\n\n"
+                             "Please provide the revised, fact-checked, and stylistically improved article.")
     ]
     log("-> Sending request to LLM for revision...")
     revised_response = llm.invoke(revision_prompt)
@@ -45,11 +52,15 @@ def get_revised_article(llm: ChatOpenAI, source_content: str, draft_article: str
 
 def get_seo_metadata(llm: ChatOpenAI, revised_article: str) -> str:
     """
-    Generates SEO metadata and formats the final output.
+    Generates SEO metadata and formats the final output.  It ensures that the
+    returned value is a valid JSON string with the required keys, stripping
+    any extra text the model might add.
     """
     log("-> Building prompt for SEO optimization and JSON formatting.")
     seo_prompt = [
-        SystemMessage(content="You are an SEO expert and content strategist. Your task is to take a final article and prepare it for publishing by creating a title and all necessary SEO metadata. Format the entire output as a single, valid JSON object."),
+        SystemMessage(content="You are an SEO expert and content strategist. Your task is to take a final article and "
+                              "prepare it for publishing by creating a title and all necessary SEO metadata. Format the "
+                              "entire output as a single, valid JSON object."),
         HumanMessage(content=f"""
         Based on the following article, please perform these tasks:
         1. Create a concise, compelling, SEO-friendly title.
@@ -62,7 +73,9 @@ def get_seo_metadata(llm: ChatOpenAI, revised_article: str) -> str:
         {revised_article}
         ---
 
-        Return a single JSON object with the following keys: "title" (string), "body" (string, which is the full revised article HTML-formatted with <p> tags), "seo_description" (string), "seo_keywords" (string), and "hashtags" (array of strings).
+        Return a single JSON object with the following keys: "title" (string), "body" (string, which is the full revised
+        article HTML-formatted with tags), "seo_description" (string), "seo_keywords" (string), and "hashtags" (array of 
+        strings).
         """)
     ]
     log("-> Sending request to LLM for final SEO and formatting...")
@@ -70,6 +83,15 @@ def get_seo_metadata(llm: ChatOpenAI, revised_article: str) -> str:
     if "error" in final_response.content:
         log(f"-> 🔥 LLM returned an error: {final_response.content}")
         return final_response.content
-    final_json_string = final_response.content
+
+    # Clean up the response to extract only the JSON object and normalise fields
+    try:
+        parsed = safe_load_json(final_response.content)
+        parsed = normalize_article(parsed)
+        final_json_string = json.dumps(parsed)
+    except Exception:
+        # If parsing fails, fall back to returning the raw content
+        final_json_string = final_response.content
+
     log("-> Final JSON object received.")
     return final_json_string
