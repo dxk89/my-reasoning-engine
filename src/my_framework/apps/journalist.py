@@ -1,3 +1,4 @@
+
 import json
 import os
 import time
@@ -23,27 +24,35 @@ def log(message):
 
 @tool
 def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: str, api_key: str) -> str:
-    # ... (this function is correct and does not need changes)
+    """
+    Generates a complete, fact-checked, and SEO-optimized article with all CMS metadata.
+    """
     log("🤖 TOOL 1: Starting multi-step article generation process...")
     source_content = scrape_content(source_url)
     if isinstance(source_content, dict) and "error" in source_content:
         return json.dumps(source_content)
+
     llm = ChatOpenAI(model_name="gpt-4o", temperature=0.5, api_key=api_key)
+
     draft_article = get_initial_draft(llm, user_prompt, source_content)
-    if isinstance(draft_article, dict) and "error" in draft_article:
-        return json.dumps(draft_article)
+    if "error" in draft_article:
+        return json.dumps({"error": draft_article})
+
     revised_article = get_revised_article(llm, source_content, draft_article)
-    if isinstance(revised_article, dict) and "error" in revised_article:
-        return json.dumps(revised_article)
+    if "error" in revised_article:
+        return json.dumps({"error": revised_article})
+
     final_json_string = get_seo_metadata(llm, revised_article)
-    if isinstance(final_json_string, dict) and "error" in final_json_string:
-        return json.dumps(final_json_string)
+    if "error" in final_json_string:
+        return json.dumps({"error": final_json_string})
+    
     try:
         parsed = safe_load_json(final_json_string)
         parsed = normalize_article(parsed)
         final_json_string = json.dumps(parsed)
-    except Exception:
-        pass
+    except Exception as e:
+        log(f"   - ⚠️ Could not normalize final JSON, but proceeding. Error: {e}")
+
     log("✅ TOOL 1: Finished successfully.")
     return final_json_string
 
@@ -58,13 +67,14 @@ def post_article_to_cms(
     save_button_id: str,
 ) -> str:
     """
-    Logs into the CMS and submits an article using browser automation.
+    Logs into the CMS and submits an article using browser automation, filling all fields.
     """
     log("🤖 TOOL 2: Starting CMS Posting...")
     
     try:
         article_content = json.loads(article_json_string)
         if "error" in article_content:
+            log(f"   - 🔥 Error found in article data: {article_content['error']}")
             return json.dumps(article_content)
     except (json.JSONDecodeError, TypeError) as e:
         return json.dumps({"error": f"Invalid JSON provided: {e}"})
@@ -72,15 +82,14 @@ def post_article_to_cms(
     driver = None
     try:
         chrome_options = webdriver.ChromeOptions()
-        
         binary_path = os.environ.get("GOOGLE_CHROME_BIN")
         driver_path = os.environ.get("CHROMEDRIVER_PATH")
 
-        if not binary_path:
-            return json.dumps({"error": "Chrome binary not found. GOOGLE_CHROME_BIN is 'None' or not set."})
+        if not binary_path or not os.path.isfile(binary_path):
+            return json.dumps({"error": f"Chrome binary not found. GOOGLE_CHROME_BIN='{binary_path}'"})
         
-        if not driver_path:
-             return json.dumps({"error": "ChromeDriver not found. CHROMEDRIVER_PATH is 'None' or not set."})
+        if not driver_path or not os.path.isfile(driver_path):
+             return json.dumps({"error": f"ChromeDriver not found. CHROMEDRIVER_PATH='{driver_path}'"})
 
         chrome_options.binary_location = binary_path
         service = Service(executable_path=driver_path)
@@ -105,10 +114,92 @@ def post_article_to_cms(
         driver.get(add_article_url)
         time.sleep(3)
         
-        # ... (rest of form-filling logic) ...
+        log("📝 Filling complete article form...")
 
+        # --- HELPER FUNCTIONS FOR FORM FILLING ---
+        def _fill_text_field(field_id, value, description):
+            if not value:
+                log(f"   - Skipping {description} (no value provided).")
+                return
+            try:
+                element = driver.find_element(By.ID, field_id)
+                element.clear()
+                element.send_keys(remove_non_bmp_chars(value))
+                log(f"   - ✅ Filled {description}.")
+            except Exception as exc:
+                log(f"   - ⚠️ Could not fill {description} (field '{field_id}'): {exc}")
+
+        def _set_ckeditor_content(element_id, html_value, description):
+            if not html_value:
+                log(f"   - Skipping {description} (no value provided).")
+                return
+            try:
+                driver.execute_script(f"CKEDITOR.instances['{element_id}'].setData({json.dumps(html_value)});")
+                log(f"   - ✅ Filled {description}.")
+            except Exception as e:
+                log(f"   - ⚠️ Could not fill rich text editor for {description}: {e}")
+        
+        # --- COMPLETE FORM FILLING LOGIC (from app.py) ---
+
+        # Main Content
+        _fill_text_field("edit-title", article_content.get("title"), "Article Title")
+        _set_ckeditor_content("edit-body-und-0-value", article_content.get("body"), "Main Body Content")
+
+        # Metadata Text Fields
+        _fill_text_field("edit-field-weekly-title-und-0-value", article_content.get("weekly_title_value"), "Weekly Title")
+        _fill_text_field("edit-field-website-callout-und-0-value", article_content.get("website_callout_value"), "Website Callout")
+        _fill_text_field("edit-field-social-media-callout-und-0-value", article_content.get("social_media_callout_value"), "Social Media Callout")
+
+        # Abstract/Summary
+        _set_ckeditor_content("edit-field-summary-und-0-value", article_content.get("abstract_value"), "Abstract/Summary")
+        
+        # SEO Fields
+        _fill_text_field("edit-field-meta-title-und-0-value", article_content.get("seo_title_value"), "SEO Title")
+        _fill_text_field("edit-field-meta-description-und-0-value", article_content.get("seo_description_value") or article_content.get("seo_description"), "SEO Description")
+        
+        # Keywords and Hashtags (handle list or string)
+        seo_keywords = article_content.get("seo_keywords_value") or article_content.get("seo_keywords")
+        if seo_keywords:
+            keywords_str = ", ".join(seo_keywords) if isinstance(seo_keywords, list) else seo_keywords
+            _fill_text_field("edit-field-meta-keywords-und-0-value", keywords_str, "SEO Keywords")
+            _fill_text_field("edit-field-google-news-keywords-und-0-value", keywords_str, "Google News Keywords")
+
+        hashtags = article_content.get("hashtags_value") or article_content.get("hashtags")
+        if hashtags:
+            hashtags_str = ", ".join(h.lstrip('#') for h in hashtags) if isinstance(hashtags, list) else hashtags
+            _fill_text_field("edit-field-hashtags-und-0-value", hashtags_str, "Hashtags")
+            
+        # Dropdowns
+        select_dropdown_option(driver, "edit-field-subject-und", article_content.get("daily_subject_value"), log, "Daily Subject")
+        select_dropdown_option(driver, "edit-field-key-und", article_content.get("key_point_value"), log, "Key Point")
+
+        # Checkboxes
+        tick_checkboxes_by_id(driver, article_content.get("publication_id_selections"), log)
+        tick_checkboxes_by_id(driver, article_content.get("country_id_selections"), log)
+        tick_checkboxes_by_id(driver, article_content.get("industry_id_selections"), log)
+
+        # Dates
+        try:
+            gmt = pytz.timezone("GMT")
+            now_gmt = datetime.now(gmt)
+            target_date = now_gmt + timedelta(days=1) if now_gmt.hour >= 7 else now_gmt
+            target_date_str = target_date.strftime("%m/%d/%Y")
+            for field_id in [
+                "edit-field-date-und-0-value-datepicker-popup-0",
+                "edit-field-sending-date-und-0-value-datepicker-popup-0",
+                "edit-field-publication-date-time-und-0-value-datepicker-popup-0",
+            ]:
+                driver.execute_script(f"document.getElementById('{field_id}').value = '{target_date_str}';")
+            log(f"   - ✅ Set scheduling dates to {target_date_str}.")
+        except Exception as exc:
+            log(f"   - ⚠️ Could not set scheduling dates: {exc}")
+        
+        # --- END OF FORM FILLING ---
+
+        log("🚀 Clicking the final 'Save' button...")
         driver.find_element(By.ID, save_button_id).click()
         time.sleep(10)
+        log("✅ TOOL 2: Finished. Article submitted successfully!")
         return "Article posted successfully."
 
     except Exception as e:
@@ -116,4 +207,5 @@ def post_article_to_cms(
         return json.dumps({"error": f"Failed to post article to CMS. Error: {e}"})
     finally:
         if driver:
+            log("   - Quitting WebDriver.")
             driver.quit()
