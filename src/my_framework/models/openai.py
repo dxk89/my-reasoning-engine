@@ -1,84 +1,134 @@
-# File: src/my_framework/models/openai.py
+import json
+import textwrap
+from openai import OpenAI
 
-import os
-from openai import OpenAI, Timeout
-from typing import List
-from pydantic import Field, SecretStr, BaseModel, ConfigDict
-from dotenv import load_dotenv
+# Initialize OpenAI client
+client = OpenAI()
 
-from .base import BaseChatModel, BaseEmbedding
-from ..core.schemas import AIMessage, MessageType
+# JSON schema for the final article object
+ARTICLE_JSON_SCHEMA = {
+    "name": "article_schema",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "body": {"type": "string"},
+            "seo_description": {"type": "string"},
+            "seo_keywords": {
+                "type": "array",
+                "items": {"type": "string"}
+            },
+            "hashtags": {
+                "type": "array",
+                "items": {"type": "string"}
+            },
+            "meta": {
+                "type": "object",
+                "properties": {
+                    "source_url": {"type": "string"},
+                    "published_at": {"type": "string"},
+                    "byline": {"type": "string"}
+                },
+                "additionalProperties": True
+            }
+        },
+        "required": ["title", "body", "seo_description", "seo_keywords"],
+        "additionalProperties": True
+    }
+}
 
-load_dotenv()
+# System message to force JSON output
+SYSTEM_JSON_ONLY = textwrap.dedent("""
+You are a formatter that outputs ONLY valid JSON that conforms to the provided schema.
+- No code fences
+- No prose
+- No comments
+- No emojis
+- No trailing commas
+""").strip()
 
-def log(message):
-    print(f"   - [openai.py] {message}", flush=True)
 
-class ChatOpenAI(BaseModel, BaseChatModel):
-    """A wrapper for the OpenAI Chat Completion API."""
-    model_config = ConfigDict(
-        protected_namespaces=(),
-        arbitrary_types_allowed=True
+# ---- JSON Helper Functions ---- #
+
+def extract_first_json_block(text: str) -> str | None:
+    """
+    Finds the first balanced {...} JSON object in text.
+    Returns the substring or None if not found.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    for i in range(start, len(text)):
+        c = text[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i+1]
+    return None
+
+
+def safe_load_json(maybe_json: str):
+    """
+    Safely loads JSON, even if the AI response has stray text.
+    """
+    # Try direct parse
+    try:
+        return json.loads(maybe_json)
+    except Exception:
+        pass
+
+    # Try extracting first {...} block
+    block = extract_first_json_block(maybe_json)
+    if not block:
+        raise ValueError("No JSON object found in model output.")
+
+    # Clean up weird quotes or backticks
+    cleaned = (
+        block.replace("“", "\"")
+             .replace("”", "\"")
+             .replace("’", "'")
+             .replace("`", "")
+    )
+    return json.loads(cleaned)
+
+
+def normalize_article(doc: dict) -> dict:
+    """
+    Normalizes metadata fields into lists.
+    """
+    if isinstance(doc.get("seo_keywords"), str):
+        doc["seo_keywords"] = [s.strip() for s in doc["seo_keywords"].split(",") if s.strip()]
+    if isinstance(doc.get("hashtags"), str):
+        doc["hashtags"] = [s.strip() for s in doc["hashtags"].split(",") if s.strip()]
+    return doc
+
+
+# ---- Main LLM Call ---- #
+
+def call_model_for_article_json(messages):
+    """
+    Calls the LLM and enforces JSON-only output.
+    """
+    resp = client.responses.create(
+        model="gpt-4o",
+        messages=messages + [{"role": "system", "content": SYSTEM_JSON_ONLY}],
+        response_format={"type": "json_schema", "json_schema": ARTICLE_JSON_SCHEMA},
+        max_output_tokens=2000,
+        temperature=0.2,
+        timeout_ms=60000  # 60 seconds instead of 20
     )
 
-    model_name: str = Field(default="gpt-4o", alias="model")
-    temperature: float = 0.7
-    api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
-    client: OpenAI = None
+    # Get raw output text
+    raw_text = resp.output_text
 
-    def __init__(self, **data):
-        super().__init__(**data)
-        # Initialize the client once with strict timeouts
-        self.client = OpenAI(
-            api_key=self.api_key.get_secret_value(),
-            timeout=Timeout(20.0, connect=5.0) # 20-second total, 5-second connect timeout
-        )
+    # Save to file for debugging
+    with open("/tmp/final_output.txt", "w", encoding="utf-8") as f:
+        f.write(raw_text)
 
-    def invoke(self, input: List[MessageType], config=None) -> AIMessage:
-        messages = [msg.model_dump() for msg in input]
-        
-        log(f"Sending request to OpenAI model '{self.model_name}' with a 20-second timeout...")
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                temperature=self.temperature
-            )
-            log("Successfully received response from OpenAI.")
-            content = response.choices[0].message.content
-            return AIMessage(content=content or "")
-        except Timeout:
-            log("🔥 OpenAI API call timed out as expected.")
-            return AIMessage(content='{"error": "AI model timed out"}')
-        except Exception as e:
-            # This will now log the specific network error we are looking for
-            log(f"🔥 An unexpected error occurred during the OpenAI API call. Type: {type(e).__name__}, Error: {e}")
-            return AIMessage(content=f'{{"error": "An unexpected error occurred with the AI model: {e}"}}')
-
-class OpenAIEmbedding(BaseEmbedding):
-    """A wrapper for the OpenAI Embedding API."""
-    model_config = ConfigDict(
-        protected_namespaces=(),
-        arbitrary_types_allowed=True
-    )
-
-    model_name: str = Field(default="text-embedding-3-small", alias="model")
-    api_key: SecretStr = Field(default_factory=lambda: SecretStr(os.environ.get("OPENAI_API_KEY", "")))
-    client: OpenAI = None
-    
-    def __init__(self, **data):
-        super().__init__(**data)
-        self.client = OpenAI(
-            api_key=self.api_key.get_secret_value(),
-            timeout=Timeout(20.0, connect=5.0)
-        )
-
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        response = self.client.embeddings.create(
-            model=self.model_name,
-            input=texts
-        )
-        return [item.embedding for item in response.data]
-
-    def embed_query(self, text: str) -> List[float]:
-        return self.embed_documents([text])[0]
+    # Parse + normalize
+    parsed = safe_load_json(raw_text)
+    parsed = normalize_article(parsed)
+    return parsed
