@@ -14,7 +14,6 @@ if [[ ! -d "$CHROME_DIR/chrome-linux64" ]]; then
   wget -q -O chrome-linux64.zip "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux64.zip"
   unzip -q chrome-linux64.zip
   rm chrome-linux64.zip
-  # Ensure the binary is executable
   chmod +x "$CHROME_DIR/chrome-linux64/chrome"
 else
   echo "...Using cached Chrome"
@@ -30,16 +29,17 @@ if [[ ! -f "$DRIVER_DIR/chromedriver" ]]; then
   unzip -q chromedriver-linux64.zip
   mv chromedriver-linux64/chromedriver .
   rm -rf chromedriver-linux64 chromedriver-linux64.zip
-  # Ensure the driver is executable
   chmod +x "$DRIVER_DIR/chromedriver"
 else
   echo "...Using cached ChromeDriver"
 fi
 
-# --- SAVE PATHS FOR STARTUP SCRIPT ---
-echo "Saving executable paths for runtime..."
-echo -n "$CHROME_DIR/chrome-linux64/chrome" > "$STORAGE_DIR/.render-chrome-path"
-echo -n "$DRIVER_DIR/chromedriver" > "$STORAGE_DIR/.render-chromedriver-path"
+# --- CREATE .env FILE ---
+echo "Creating .env file with executable paths..."
+cat <<EOF > "/opt/render/project/src/.env"
+GOOGLE_CHROME_BIN="$CHROME_DIR/chrome-linux64/chrome"
+CHROMEDRIVER_PATH="$DRIVER_DIR/chromedriver"
+EOF
 
 echo "Build script finished."
 cd "$HOME/project/src"
