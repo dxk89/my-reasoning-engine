@@ -1,20 +1,29 @@
 # File: my_framework/app/server.py
+
+# --- FIX FOR LOCAL DEVELOPMENT ---
+# This code adds the project's root directory to the Python path
+# so that it can find the 'my_framework' module.
+# It has no effect when running on Render, so it's safe to include.
+import sys
+import os
 from dotenv import load_dotenv
-load_dotenv() # This line is critical: it loads the .env file created by the build script.
+
+# Get the absolute path of the directory containing this script (app)
+# and then get the parent directory (the project root)
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+src_path = os.path.join(project_root, 'src')
+
+# Add the 'src' directory to the Python path
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+# --- END OF FIX ---
+
+load_dotenv()
 
 from fastapi import FastAPI, HTTPException
 import threading
 import json
-import os
 import pprint
-
-# --- Diagnostic Code ---
-# This will print all the environment variables that the Python app can see.
-# After this fix, you should see GOOGLE_CHROME_BIN in this list.
-print("--- Python Application Environment Variables ---")
-pprint.pprint(dict(os.environ))
-print("----------------------------------------------")
-
 from my_framework.apps.journalist import generate_article_and_metadata, post_article_to_cms
 
 app = FastAPI(
@@ -22,6 +31,13 @@ app = FastAPI(
     version="1.9",
     description="An API that runs a robust, direct workflow for generating and posting articles."
 )
+
+# --- Diagnostic Code ---
+# This will print all the environment variables that the Python app can see.
+print("--- Python Application Environment Variables ---")
+pprint.pprint(dict(os.environ))
+print("----------------------------------------------")
+
 
 def journalist_workflow(config_data: dict):
     """

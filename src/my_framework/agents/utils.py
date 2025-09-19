@@ -855,17 +855,21 @@ def remove_non_bmp_chars(text):
     return "".join(c for c in text if ord(c) <= 0xFFFF)
 
 def tick_checkboxes_by_id(driver, id_list, log_func):
+    """
+    Force-ticks checkboxes using a JavaScript click, even if they are not visible.
+    """
     if not id_list:
         return
-    log_func(f"   - Selecting {len(id_list)} checkboxes by ID...")
+    log_func(f"   - Ticking {len(id_list)} checkboxes by ID...")
     for checkbox_id in id_list:
         try:
+            # Find the checkbox element
             checkbox = driver.find_element(By.ID, checkbox_id)
-            if not checkbox.is_selected():
-                driver.execute_script("arguments[0].click();", checkbox)
-                log_func(f"       - Ticked '{checkbox_id}'")
+            # Use JavaScript to click the element
+            driver.execute_script("arguments[0].click();", checkbox)
+            log_func(f"       - ✅ Ticked '{checkbox_id}'")
         except Exception:
-            log_func(f"     - ⚠️ Could not find or tick checkbox with ID '{checkbox_id}'")
+            log_func(f"       - ⚠️ Could not find or tick checkbox with ID '{checkbox_id}'")
 
 def select_dropdown_option(driver, element_id, value, log_func, field_name):
     try:
