@@ -88,9 +88,11 @@ if [[ ! -f "$STORAGE_DIR/chromedriver/chromedriver" ]]; then
     rm -rf chromedriver-linux64 chromedriver-linux64.zip
     set -o errexit
   else
-    echo "...Failed to download ChromeDriver.  Aborting build." >&2
+    echo "...ChromeDriver archive not found.  Proceeding without preinstalled driver."
     rm -f chromedriver-linux64.zip
-    exit 1
+    # Do not abort the build if driver cannot be downloaded.  The
+    # application will fall back to downloading a driver at runtime via
+    # webdriver_manager.
   fi
   cd "$HOME/project/src" || true
 else
