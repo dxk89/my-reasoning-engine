@@ -240,17 +240,28 @@ def post_article_to_cms(
         except Exception:
             major_version = None
 
-        # Install a ChromeDriver that matches the detected major version.
-        # If we couldn’t determine the version, fall back to the default
-        # behaviour (latest driver), which may still work if the driver
-        # supports the installed Chrome.
-        if major_version:
-            try:
-                service = Service(ChromeDriverManager(version=major_version).install())
-            except Exception:
-                service = Service(ChromeDriverManager().install())
+        # Prefer using a pre-installed ChromeDriver if one is available.
+        # The render-build.sh script downloads a driver into
+        # /opt/render/project/.render/chromedriver/chromedriver and the start
+        # command sets CHROMEDRIVER_PATH accordingly.  If a driver path
+        # exists and points to an executable file, use it.  Otherwise,
+        # fallback to webdriver_manager to download a matching driver.  We
+        # detect the Chrome version to request the correct driver version.
+        driver_path = os.environ.get("CHROMEDRIVER_PATH")
+        if driver_path and os.path.isfile(driver_path):
+            service = Service(executable_path=driver_path)
         else:
-            service = Service(ChromeDriverManager().install())
+            # Install a ChromeDriver that matches the detected major version.
+            # If we couldn’t determine the version, fall back to the default
+            # behaviour (latest driver), which may still work if the driver
+            # supports the installed Chrome.
+            if major_version:
+                try:
+                    service = Service(ChromeDriverManager(version=major_version).install())
+                except Exception:
+                    service = Service(ChromeDriverManager().install())
+            else:
+                service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.implicitly_wait(15)
 
