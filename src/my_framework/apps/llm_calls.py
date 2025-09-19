@@ -53,7 +53,6 @@ def get_revised_article(llm: ChatOpenAI, source_content: str, draft_article: str
 def get_seo_metadata(llm: ChatOpenAI, revised_article: str) -> str:
     """
     Generates comprehensive SEO and CMS metadata and formats the final output.
-    This is the corrected and expanded version.
     """
     log("-> Building prompt for SEO optimization and JSON formatting.")
     seo_prompt = [
