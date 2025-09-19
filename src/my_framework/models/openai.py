@@ -132,3 +132,62 @@ def call_model_for_article_json(messages):
     parsed = safe_load_json(raw_text)
     parsed = normalize_article(parsed)
     return parsed
+
+
+# ---- ChatOpenAI Wrapper Class ---- #
+
+class ChatOpenAI:
+    """
+    A lightweight wrapper around OpenAI’s chat completions API. Instances of this
+    class can be used anywhere in the framework where a ChatOpenAI with an
+    `.invoke()` method is expected.
+    """
+    def __init__(
+        self,
+        model_name: str = "gpt-3.5-turbo",
+        temperature: float = 0.5,
+        api_key: str | None = None,
+        max_tokens: int = 2000
+    ) -> None:
+        # Allow per-instance API key override; falls back to env if None
+        self.client = OpenAI(api_key=api_key)
+        self.model_name = model_name
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+
+    def invoke(self, messages):
+        """
+        Send a list of messages to the chat model and return a simple object
+        with a `.content` attribute containing the assistant’s reply.
+        Each message should be either a dict with 'role' and 'content' fields,
+        or an instance of my_framework.core.schemas.BaseMessage (which has
+        .role and .content attributes).
+        """
+        formatted = []
+        for m in messages:
+            # Convert pydantic messages or dicts to the format expected by the API
+            if hasattr(m, "role") and hasattr(m, "content"):
+                formatted.append({"role": m.role, "content": m.content})
+            elif isinstance(m, dict) and "role" in m and "content" in m:
+                formatted.append({"role": m["role"], "content": m["content"]})
+            else:
+                raise ValueError(f"Unsupported message type: {m!r}")
+
+            # The OpenAI API currently only supports the three roles "system", "user"
+            # (for human messages) and "assistant" (for AI messages). If the caller
+            # passes something different, it may cause an API error. We do not
+            # enforce role validation here to preserve backwards compatibility.
+
+        response = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=formatted,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
+        # Wrap the content in a simple object that exposes a `.content` property,
+        # similar to the return type used by other parts of the framework.
+        class _Result:
+            def __init__(self, content):
+                self.content = content
+
+        return _Result(response.choices[0].message.content)
