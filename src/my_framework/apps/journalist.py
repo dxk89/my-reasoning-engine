@@ -72,14 +72,6 @@ def post_article_to_cms(
 ) -> str:
     """
     Logs into the CMS and submits an article using browser automation.
-    This function uses Selenium to automate the browser. It requires that a Chrome
-    binary be installed in the Render environment.  The `render-build.sh` script
-    downloads either a portable Chrome‑for‑Testing archive or falls back to the
-    Google Chrome `.deb` package and extracts it into the `.render/chrome` directory.
-    At startup, the service dynamically locates the Chrome binary under that
-    directory and exports `GOOGLE_CHROME_BIN` and updates `PATH`.  If for some
-    reason the environment variable is not set, this function will attempt to
-    use a sensible default path.  See render.yaml for details.
     """
 
     log("🤖 TOOL 2: Starting CMS Posting...")
@@ -94,13 +86,9 @@ def post_article_to_cms(
         log(error_message)
         return json.dumps({"error": error_message})
 
-    # Try strict JSON parse first; fall back to safe_load_json if needed
     try:
         article_content = json.loads(article_json_string)
     except json.JSONDecodeError:
-        # Initialize full_version to None; will hold the full version string
-        # (e.g., 140.0.7339.185) of the installed Chrome, if detected.
-        full_version = None
         try:
             article_content = safe_load_json(article_json_string)
         except Exception as exc:
@@ -144,7 +132,7 @@ def post_article_to_cms(
                 html_value,
             )
             log(f"   - Filled rich text field '{element_id}'.")
-        except Exception as exc:  # pragma: no cover - best effort logging
+        except Exception as exc:
             log(f"   - ⚠️ Could not populate rich text field '{element_id}': {exc}")
 
     def _fill_text_field(driver, field_id, value, description):
@@ -155,7 +143,7 @@ def post_article_to_cms(
             element.clear()
             element.send_keys(remove_non_bmp_chars(value))
             log(f"   - Filled {description}.")
-        except Exception as exc:  # pragma: no cover - best effort logging
+        except Exception as exc:
             log(f"   - ⚠️ Could not fill {description} (field '{field_id}'): {exc}")
 
     driver = None
@@ -163,38 +151,11 @@ def post_article_to_cms(
 
     try:
         chrome_options = webdriver.ChromeOptions()
-        # If a chrome binary location is provided, set it.  This allows
-        # Selenium to find the chrome executable when it is not installed
-        # system-wide.  The start command in render.yaml should set
-        # GOOGLE_CHROME_BIN to the full path of the installed chrome.
-        # Determine the path to the Chrome binary.  By default we
-        # assume Chrome was installed into Render’s persistent storage
-        # using the Chrome‑for‑Testing archive (see render-build.sh).
-        # The environment variable GOOGLE_CHROME_BIN can override this
-        # default.  If neither is set, we fall back to the older
-        # google-chrome path for backwards compatibility.
-        # Determine the path to the Chrome binary.  First, prefer any
-        # path provided via the environment variable.  If it is not set
-        # or does not point to an existing file, try a handful of
-        # common fallback locations used by our build script.  Finally,
-        # if none of these exist, leave binary_location unset and
-        # rely on Chromedriver’s default discovery (which will likely
-        # fail with a helpful error message).
+        
         binary_path = os.environ.get("GOOGLE_CHROME_BIN")
-        if not binary_path or not os.path.isfile(binary_path):
-            candidates = [
-                "/opt/render/project/.render/chrome/chrome-linux64/chrome",
-                "/opt/render/project/.render/chrome/opt/google/chrome/google-chrome",
-            ]
-            for candidate in candidates:
-                if os.path.isfile(candidate):
-                    binary_path = candidate
-                    break
-        if binary_path:
+        if binary_path and os.path.isfile(binary_path):
             chrome_options.binary_location = binary_path
 
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--window-size=1920,1080")
         if is_headless or os.environ.get("HEADLESS_CHROME"):
             log("Running Chrome in headless mode.")
             chrome_options.add_argument("--headless=new")
@@ -203,85 +164,12 @@ def post_article_to_cms(
         else:
             log("Running Chrome with UI (non-headless).")
 
-        # NOTE: Chrome must be installed in your Render environment.  See
-        # the deployment instructions for details.
-        # Use a ChromeDriver version that matches the installed Chrome.  In
-        # Render’s environment, the Chrome binary may not be available
-        # system‑wide, so webdriver_manager’s default version (which
-        # downloads the latest driver) can mismatch the actual browser
-        # version.  To avoid "This version of ChromeDriver only supports
-        # Chrome version XX" errors, detect the installed Chrome
-        # version and request the corresponding driver.
-        try:
-            import subprocess
-
-            # Attempt to retrieve the major version number of the installed
-            # Chrome.  The binary_path variable points to the Chrome
-            # executable determined above.  Running `--version` returns
-            # something like "Google Chrome 116.0.5845.96".  We split
-            # this string to extract the major version (e.g. "116").
-            chrome_version_output = subprocess.check_output([
-                binary_path, "--version"
-            ], stderr=subprocess.STDOUT).decode().strip()
-            # The version number is typically the last element in the
-            # space-separated output.  Split on spaces and then on
-            # periods to get the major version.
-            version_parts = chrome_version_output.split()
-            # The actual version string is usually at index 2 for
-            # outputs like "Google Chrome 116.0.5845.96" or index 3
-            # for "Chromium 116.0.5845.96".  Use a fallback if the
-            # expected index is not present.
-            version_str = None
-            for idx in [2, 3]:
-                if idx < len(version_parts) and version_parts[idx][0].isdigit():
-                    version_str = version_parts[idx]
-                    break
-            if version_str:
-                # Store full version string (e.g. 140.0.7339.185)
-                full_version = version_str
-                major_version = version_str.split(".")[0]
-            else:
-                full_version = None
-                major_version = None
-        except Exception:
-            full_version = None
-            major_version = None
-
-        # Prefer using a pre-installed ChromeDriver if one is available.
-        # The render-build.sh script downloads a driver into
-        # /opt/render/project/.render/chromedriver/chromedriver and the start
-        # command sets CHROMEDRIVER_PATH accordingly.  If a driver path
-        # exists and points to an executable file, use it.  Otherwise,
-        # fallback to webdriver_manager to download a matching driver.  We
-        # detect the Chrome version to request the correct driver version.
         driver_path = os.environ.get("CHROMEDRIVER_PATH")
         if driver_path and os.path.isfile(driver_path):
             service = Service(executable_path=driver_path)
         else:
-            # Attempt to install a ChromeDriver that matches the detected
-            # version.  WebDriverManager allows specifying either a
-            # `driver_version` (full version string) or a `version` (major
-            # version).  Use the full version string when available to avoid
-            # fetching an outdated driver.  If installation fails or
-            # network restrictions prevent downloading, fall back to the
-            # latest available driver.  Note: WebDriverManager caches
-            # downloaded drivers, so subsequent runs should reuse them.
-            if full_version:
-                try:
-                    service = Service(ChromeDriverManager(driver_version=full_version).install())
-                except Exception:
-                    # Fallback to major version if full version download fails
-                    try:
-                        service = Service(ChromeDriverManager(version=major_version).install())
-                    except Exception:
-                        service = Service(ChromeDriverManager().install())
-            elif major_version:
-                try:
-                    service = Service(ChromeDriverManager(version=major_version).install())
-                except Exception:
-                    service = Service(ChromeDriverManager().install())
-            else:
-                service = Service(ChromeDriverManager().install())
+            service = Service(ChromeDriverManager().install())
+            
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.implicitly_wait(15)
 
@@ -326,7 +214,6 @@ def post_article_to_cms(
         if body_value:
             _set_ckeditor_content(driver, "edit-body-und-0-value", body_value)
 
-        # Optional metadata fields if available in the payload.
         text_field_map = {
             "weekly_title_value": (
                 "edit-field-weekly-title-und-0-value",
@@ -389,7 +276,6 @@ def post_article_to_cms(
                 "hashtags",
             )
 
-        # Apply checkbox and dropdown helpers if provided.
         tick_checkboxes_by_id(
             driver,
             article_content.get("country_id_selections"),
@@ -415,7 +301,6 @@ def post_article_to_cms(
             "Key Point",
         )
 
-        # Attempt to set scheduling dates to a sensible default.
         try:
             gmt = pytz.timezone("GMT")
             now_gmt = datetime.now(gmt)
@@ -440,10 +325,9 @@ def post_article_to_cms(
                     target_date_str,
                 )
             log(f"   - Set scheduling dates to {target_date_str}.")
-        except Exception as exc:  # pragma: no cover - best effort logging
+        except Exception as exc:
             log(f"   - ⚠️ Could not set scheduling dates: {exc}")
 
-        # Allow direct mapping if article JSON includes explicit field IDs.
         form_fields = article_content.get("form_fields")
         if isinstance(form_fields, dict):
             for field_id, raw_value in form_fields.items():
@@ -464,7 +348,7 @@ def post_article_to_cms(
                             element.clear()
                             element.send_keys("true" if value else "false")
                             log(f"   - Filled field '{field_id}'.")
-                    except Exception as exc:  # pragma: no cover - best effort logging
+                    except Exception as exc:
                         log(f"   - ⚠️ Could not update field '{field_id}': {exc}")
                 else:
                     _fill_text_field(
