@@ -98,6 +98,9 @@ def post_article_to_cms(
     try:
         article_content = json.loads(article_json_string)
     except json.JSONDecodeError:
+        # Initialize full_version to None; will hold the full version string
+        # (e.g., 140.0.7339.185) of the installed Chrome, if detected.
+        full_version = None
         try:
             article_content = safe_load_json(article_json_string)
         except Exception as exc:
@@ -234,10 +237,14 @@ def post_article_to_cms(
                     version_str = version_parts[idx]
                     break
             if version_str:
+                # Store full version string (e.g. 140.0.7339.185)
+                full_version = version_str
                 major_version = version_str.split(".")[0]
             else:
+                full_version = None
                 major_version = None
         except Exception:
+            full_version = None
             major_version = None
 
         # Prefer using a pre-installed ChromeDriver if one is available.
@@ -251,11 +258,24 @@ def post_article_to_cms(
         if driver_path and os.path.isfile(driver_path):
             service = Service(executable_path=driver_path)
         else:
-            # Install a ChromeDriver that matches the detected major version.
-            # If we couldn’t determine the version, fall back to the default
-            # behaviour (latest driver), which may still work if the driver
-            # supports the installed Chrome.
-            if major_version:
+            # Attempt to install a ChromeDriver that matches the detected
+            # version.  WebDriverManager allows specifying either a
+            # `driver_version` (full version string) or a `version` (major
+            # version).  Use the full version string when available to avoid
+            # fetching an outdated driver.  If installation fails or
+            # network restrictions prevent downloading, fall back to the
+            # latest available driver.  Note: WebDriverManager caches
+            # downloaded drivers, so subsequent runs should reuse them.
+            if full_version:
+                try:
+                    service = Service(ChromeDriverManager(driver_version=full_version).install())
+                except Exception:
+                    # Fallback to major version if full version download fails
+                    try:
+                        service = Service(ChromeDriverManager(version=major_version).install())
+                    except Exception:
+                        service = Service(ChromeDriverManager().install())
+            elif major_version:
                 try:
                     service = Service(ChromeDriverManager(version=major_version).install())
                 except Exception:
