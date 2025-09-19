@@ -22,11 +22,16 @@ services:
       # Install Python dependencies
       pip install -r requirements.txt
     # Prepend Chrome’s location to the PATH before launching the app.
-    # This allows Selenium to find the chrome binary without needing to
-    # hardcode a path in your Python code.  uvicorn is used here to run
-    # the FastAPI application defined in app.server.
+    # We set GOOGLE_CHROME_BIN to the portable Chrome binary extracted
+    # during the build step.  We also extend the PATH so that
+    # webdriver-manager and other tooling can locate the executable.
+    # uvicorn is used here to run the FastAPI application defined in
+    # app.server.
     startCommand: |
-      export PATH="${PATH}:/opt/render/project/.render/chrome/opt/google/chrome"
+      # Point Selenium to the installed Chrome binary and ensure it is in PATH.
+      export GOOGLE_CHROME_BIN="/opt/render/project/.render/chrome/chrome-linux64/chrome"
+      export PATH="${PATH}:/opt/render/project/.render/chrome/chrome-linux64"
+      # Launch the FastAPI app via uvicorn
       uvicorn app.server:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: OPENAI_API_KEY

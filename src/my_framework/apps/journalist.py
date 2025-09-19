@@ -163,9 +163,15 @@ def post_article_to_cms(
         # Selenium to find the chrome executable when it is not installed
         # system-wide.  The start command in render.yaml should set
         # GOOGLE_CHROME_BIN to the full path of the installed chrome.
+        # Determine the path to the Chrome binary.  By default we
+        # assume Chrome was installed into Render’s persistent storage
+        # using the Chrome‑for‑Testing archive (see render-build.sh).
+        # The environment variable GOOGLE_CHROME_BIN can override this
+        # default.  If neither is set, we fall back to the older
+        # google-chrome path for backwards compatibility.
         binary_path = os.environ.get(
             "GOOGLE_CHROME_BIN",
-            "/opt/render/project/.render/chrome/opt/google/chrome/google-chrome"
+            "/opt/render/project/.render/chrome/chrome-linux64/chrome"
         )
         if binary_path:
             chrome_options.binary_location = binary_path
