@@ -3,6 +3,9 @@
 import re
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
+from ..models.base import BaseChatModel
+from ..core.schemas import HumanMessage
+from typing import List
 
 # --- DATA DICTIONARIES ---
 
@@ -839,12 +842,13 @@ def get_metadata_prompt(article_title, article_body):
 
     RULES:
     - "abstract_value" should be a concise summary of the page's content, preferably 150 characters or less.
+    - "social_media_callout_value" should be less than 250 characters.
     - "hashtags_value" must be an ARRAY of up to 5 relevant hashtags as strings, each starting with '#'.
     - "google_news_keywords_value" should be a single string of comma-separated keywords.
     - "daily_subject_value": Choose ONE from ["Macroeconomic News", "Banking And Finance", "Companies and Industries", "Political"]
     - "key_point_value": Choose ONE from ["Yes", "No"].
     - "machine_written_value": Choose ONE from ["Yes", "No"].
-    - "ballot_box_value": Choose ONE from ["Yes", "No"].
+    - "ballot_box_value": Choose ONE from ["Yes", "No"]. If the article is about elections, this should be "Yes".
     - "byline_value": Enter the author's name, or "staff writer" if not available.
     - For all section fields (e.g., "africa_daily_section_value"), choose the most relevant section from the available options if the article pertains to that region.
 
@@ -874,6 +878,43 @@ def tick_checkboxes_by_id(driver, id_list, log_func):
             log_func(f"       - ✅ Ticked '{checkbox_id}'")
         except Exception:
             log_func(f"       - ⚠️ Could not find or tick checkbox with ID '{checkbox_id}'")
+
+def get_publication_prompt(article_title, article_body, publications):
+    """Creates the prompt for selecting publications."""
+    return f"""
+    You are an expert sub-editor. Your task is to select the most relevant publications for the given article.
+
+    Here is the list of available publications:
+    {publications}
+
+    RULES:
+    - You MUST select at least one publication.
+    - Only select top-level publications (e.g., "Africa Today") if the article covers the entire region. Otherwise, select the most specific publication(s) possible.
+    - Your response must be ONLY a comma-separated list of the selected publication names.
+
+    ARTICLE FOR ANALYSIS:
+    Article Title: "{article_title}"
+    Article Body: "{article_body}"
+    """
+
+def get_publication_ids_from_llm(llm: BaseChatModel, article_title: str, article_body: str) -> List[str]:
+    """
+    Determines which publications to select based on the article's content using an LLM call.
+    """
+    publication_names = list(PUBLICATION_MAP.keys())
+    publications_str = "\n".join([f"- {name}" for name in publication_names])
+    
+    prompt = get_publication_prompt(article_title, article_body, publications_str)
+    
+    messages = [HumanMessage(content=prompt)]
+    response = llm.invoke(messages)
+    
+    selected_publications_str = response.content.strip()
+    selected_publications = [name.strip() for name in selected_publications_str.split(',')]
+    
+    publication_ids = [PUBLICATION_MAP[name] for name in selected_publications if name in PUBLICATION_MAP]
+    
+    return publication_ids
 
 def select_dropdown_option(driver, element_id, value, log_func, field_name):
     try:

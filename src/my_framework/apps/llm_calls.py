@@ -65,15 +65,30 @@ def get_seo_metadata(llm: ChatOpenAI, revised_article: str) -> str:
         JSON OUTPUT REQUIREMENTS:
         1.  "title": A concise, compelling, SEO-friendly title. This field is required.
         2.  "body": The full revised article, formatted with HTML paragraph tags (`<p>`). This field is required.
-        3.  "seo_description": A concise, engaging SEO meta description (155 characters max).
-        4.  "seo_keywords": A comma-separated string of relevant SEO keywords.
-        5.  "hashtags": An array of 3-5 relevant social media hashtags (e.g., ["#Slovenia", "#Aviation"]).
-        6.  "weekly_title_value": A very short, punchy title for a weekly newsletter.
-        7.  "website_callout_value": A brief, attention-grabbing callout for the website's front page.
-        8.  "social_media_callout_value": A short, engaging phrase for social media posts.
-        9.  "abstract_value": A concise summary of the article's content (150 characters max).
-        10. "daily_subject_value": **Required.** Choose ONE: "Macroeconomic News", "Banking And Finance", "Companies and Industries", or "Political".
-        11. "key_point_value": **Required.** Choose ONE: "Yes" or "No".
+        3.  "publications": An array of strings with the names of the MOST SPECIFIC relevant publications (e.g., ["Slovenia Today"]). This is required.
+        4.  "countries": An array of strings with the exact names of countries mentioned (e.g., ["Slovenia"]).
+        5.  "industries": An array of strings with the names of relevant industries (e.g., ["Renewables", "Banking"]).
+        6.  "seo_description": A concise, engaging SEO meta description (155 characters max).
+        7.  "seo_keywords": A comma-separated string of relevant SEO keywords.
+        8.  "hashtags": An array of 3-5 relevant social media hashtags (e.g., ["#Slovenia", "#Aviation"]).
+        9.  "weekly_title_value": A very short, punchy title for a weekly newsletter.
+        10. "website_callout_value": A brief, attention-grabbing callout for the website's front page.
+        11. "social_media_callout_value": A short, engaging phrase for social media posts (less than 250 characters).
+        12. "abstract_value": A concise summary of the article's content (150 characters max).
+        13. "google_news_keywords_value": A comma-separated string of relevant keywords for Google News.
+        14. "daily_subject_value": **Required.** Choose ONE: "Macroeconomic News", "Banking And Finance", "Companies and Industries", or "Political".
+        15. "key_point_value": **Required.** Choose ONE: "Yes" or "No".
+        16. "machine_written_value": **Required.** Choose ONE: "Yes" or "No".
+        17. "byline_value": The author's name, or "staff writer" if not available.
+        18. "ballot_box_value": **Required.** Choose ONE: "Yes" or "No". If the article is about elections, this must be "Yes".
+        19. "africa_daily_section_value": If relevant, choose ONE from ["- None -", "Top Story", "Politics", "Business & Finance", "Energy & Commodities"].
+        20. "southeast_europe_today_sections_value": If relevant, choose ONE from ["- None -", "Top Story", "Business", "Finance", "Politics"].
+        21. "cee_news_watch_country_sections_value": If relevant, choose ONE from ["- None -", "Top Story", "Macro", "Politics", "SME", "Events", "Thematic Investing", "bneInvestigator"].
+        22. "n_africa_today_section_value": If relevant, choose ONE from ["- None -", "Top Story", "Politics", "Business & Finance", "Energy & Commodities"].
+        23. "middle_east_today_section_value": If relevant, choose ONE from ["- None -", "Top Story", "Politics", "Business & Finance", "Energy & Commodities"].
+        24. "baltic_states_today_sections_value": If relevant, choose ONE from ["- None -", "Top story", "Politics", "Economics", "Business"].
+        25. "asia_today_sections_value": If relevant, choose ONE from ["- None -", "Top Story", "Politics", "Business & Finance", "Sanctions"].
+        26. "latam_today_value": If relevant, choose ONE from ["- None -", "Top Story", "Politics", "Business & Finance", "Energy & Commodities"].
         """)
     ]
     log("-> Sending request to LLM for final SEO and formatting...")

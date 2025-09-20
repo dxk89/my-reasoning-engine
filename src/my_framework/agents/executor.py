@@ -2,12 +2,13 @@
 
 import re
 from typing import List, Dict, Any
-from pydantic import BaseModel # <--- ADD THIS IMPORT
+from pydantic import BaseModel
 
 from .tools import BaseTool
 from ..core.runnables import Runnable
 from ..core.schemas import HumanMessage, AIMessage, SystemMessage
 from ..models.base import BaseChatModel
+from .utils import get_publication_ids_from_llm
 
 DEFAULT_AGENT_PROMPT_TEMPLATE = """
 You are a helpful assistant that has access to the following tools.
@@ -33,12 +34,11 @@ User Query: {input}
 Agent Scratchpad: {agent_scratchpad}
 """
 
-# --- THE FIX IS ON THE LINE BELOW ---
 class AgentExecutor(BaseModel, Runnable[Dict[str, Any], str]):
     """The runtime for a ReAct-style agent."""
     llm: BaseChatModel
     tools: List[BaseTool]
-    system_prompt: str | None = None # <-- ADDED THIS FIELD
+    system_prompt: str | None = None
     max_iterations: int = 5
 
     class Config:
@@ -60,14 +60,20 @@ class AgentExecutor(BaseModel, Runnable[Dict[str, Any], str]):
     def invoke(self, input: Dict[str, Any], config=None) -> str:
         """Executes the agent's reasoning loop."""
         user_input = input.get("input", "")
+        article_title = input.get("article_title", "")
+        article_body = input.get("article_body", "")
         tool_names = ", ".join([tool.name for tool in self.tools])
         tools_str = self._format_tools()
-        
+
         intermediate_steps = ""
-        
+
         # Use the custom system prompt if provided, otherwise use the default
         prompt_template = self.system_prompt or DEFAULT_AGENT_PROMPT_TEMPLATE
-        
+
+        # Get the publication IDs based on the article's content using an LLM call
+        publication_ids_to_select = get_publication_ids_from_llm(self.llm, article_title, article_body)
+        input["publication_id_selections"] = publication_ids_to_select
+
         for i in range(self.max_iterations):
             # 1. Format the prompt
             prompt_content = prompt_template.format(
@@ -76,7 +82,7 @@ class AgentExecutor(BaseModel, Runnable[Dict[str, Any], str]):
                 input=user_input,
                 agent_scratchpad=intermediate_steps
             )
-            
+
             # 2. Call the LLM
             messages = [
                 SystemMessage(content="You are an AI agent."), # A generic role
@@ -84,7 +90,7 @@ class AgentExecutor(BaseModel, Runnable[Dict[str, Any], str]):
             ]
             response = self.llm.invoke(messages)
             llm_output = response.content
-            
+
             # 3. Parse the output
             final_answer_match = re.search(r"Final Answer:\s*(.*)", llm_output, re.DOTALL)
             action_match = re.search(r"Action:\s*(.*?)\nAction Input:\s*(.*)", llm_output, re.DOTALL)
@@ -100,7 +106,7 @@ class AgentExecutor(BaseModel, Runnable[Dict[str, Any], str]):
                 tool = self._get_tool_by_name(action_name)
                 if tool:
                     try:
-                        observation = tool.run(action_input)
+                        observation = tool.run(input)
                     except Exception as e:
                         observation = f"Error executing tool {action_name}: {e}"
                 else:
@@ -109,6 +115,8 @@ class AgentExecutor(BaseModel, Runnable[Dict[str, Any], str]):
                 # 5. Update scratchpad for the next loop
                 intermediate_steps += llm_output + f"\nObservation: {observation}\n"
             else:
-                return "Agent failed to produce a valid action or final answer."
+                # If the LLM output doesn't match the expected format,
+                # treat the entire output as the final answer.
+                return llm_output.strip()
 
         return "Agent stopped after reaching max iterations."
