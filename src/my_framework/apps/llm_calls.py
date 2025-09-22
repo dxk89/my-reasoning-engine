@@ -1,16 +1,18 @@
 # File: src/my_framework/apps/llm_calls.py
 
-from my_framework.models.openai import ChatOpenAI, safe_load_json, normalize_article
+from my_framework.models.openai import ChatOpenAI
 from my_framework.core.schemas import SystemMessage, HumanMessage
+from my_framework.agents.utils import INDUSTRY_MAP, PUBLICATION_MAP, COUNTRY_MAP
+from my_framework.parsers.standard import PydanticOutputParser
+from .schemas import ArticleMetadata
 import json
+from typing import List
 
 def log(message):
     print(f"   - {message}", flush=True)
 
 def get_initial_draft(llm: ChatOpenAI, user_prompt: str, source_content: str) -> str:
-    """
-    Generates the initial draft of the article.
-    """
+    # ... (This function remains the same)
     log("-> Building prompt for initial draft.")
     draft_prompt = [
         SystemMessage(content="You are an expert journalist. Your task is to write a professional, insightful, and "
@@ -25,10 +27,9 @@ def get_initial_draft(llm: ChatOpenAI, user_prompt: str, source_content: str) ->
     log(f"-> Initial draft received ({len(draft_article)} characters).")
     return draft_article
 
+
 def get_revised_article(llm: ChatOpenAI, source_content: str, draft_article: str) -> str:
-    """
-    Fact-checks and improves the style of the article.
-    """
+    # ... (This function remains the same)
     log("-> Building prompt for fact-checking and stylistic improvements.")
     revision_prompt = [
         SystemMessage(content="You are a meticulous editor for intellinews.com. Your task is to review a draft article. "
@@ -44,62 +45,133 @@ def get_revised_article(llm: ChatOpenAI, source_content: str, draft_article: str
     log(f"-> Revised article received ({len(revised_article)} characters).")
     return revised_article
 
+def get_country_selection(llm: ChatOpenAI, article_text: str) -> List[str]:
+    """Makes a dedicated LLM call to get the country selection."""
+    log("   -> Getting country selection...")
+    country_names = list(COUNTRY_MAP.keys())
+    countries_str = "\n".join([f"- {name}" for name in country_names])
+    
+    prompt = [
+        SystemMessage(content="You are an expert data extractor. Your only task is to identify the main country or countries discussed in the provided article text. "
+                              "You must choose from the list of available countries. Your response must be a single, comma-separated string of the selected country names."),
+        HumanMessage(content=f"""
+        Based on the article text below, select the most relevant country or countries.
+
+        AVAILABLE COUNTRIES:
+        ---
+        {countries_str}
+        ---
+
+        ARTICLE TEXT:
+        ---
+        {article_text}
+        ---
+
+        Your response must be ONLY a comma-separated list of the selected country names.
+        """)
+    ]
+    response = llm.invoke(prompt)
+    return [name.strip() for name in response.content.split(',')]
+
+def get_publication_selection(llm: ChatOpenAI, article_text: str) -> List[str]:
+    """Makes a dedicated LLM call to get the publication selection."""
+    log("   -> Getting publication selection...")
+    publication_names = list(PUBLICATION_MAP.keys())
+    publications_str = "\n".join([f"- {name}" for name in publication_names])
+
+    prompt = [
+        SystemMessage(content="You are an expert sub-editor. Your only task is to select the most appropriate publications for an article from a provided list. "
+                              "You must choose the MOST SPECIFIC publication possible. Your response must be a single, comma-separated string of the selected publication names."),
+        HumanMessage(content=f"""
+        Based on the article text below, select the most relevant publication(s).
+
+        AVAILABLE PUBLICATIONS:
+        ---
+        {publications_str}
+        ---
+
+        ARTICLE TEXT:
+        ---
+        {article_text}
+        ---
+
+        Your response must be ONLY a comma-separated list of the selected publication names. For example: "Slovenia Today, CEE Energy News Watch"
+        """)
+    ]
+    response = llm.invoke(prompt)
+    return [name.strip() for name in response.content.split(',')]
+
+def get_industry_selection(llm: ChatOpenAI, article_text: str) -> List[str]:
+    """Makes a dedicated LLM call to get the industry selection."""
+    log("   -> Getting industry selection...")
+    industry_names = list(INDUSTRY_MAP.keys())
+    industries_str = "\n".join([f"- {name}" for name in industry_names])
+
+    prompt = [
+        SystemMessage(content="You are an expert data analyst. Your only task is to select the most relevant industries for an article from a provided list. "
+                              "You must choose the MOST SPECIFIC industry possible. Your response must be a single, comma-separated string of the selected industry names."),
+        HumanMessage(content=f"""
+        Based on the article text below, select the most relevant industry or industries.
+
+        AVAILABLE INDUSTRIES:
+        ---
+        {industries_str}
+        ---
+
+        ARTICLE TEXT:
+        ---
+        {article_text}
+        ---
+
+        Your response must be ONLY a comma-separated list of the selected industry names.
+        """)
+    ]
+    response = llm.invoke(prompt)
+    return [name.strip() for name in response.content.split(',')]
+
 def get_seo_metadata(llm: ChatOpenAI, revised_article: str) -> str:
     """
-    Generates comprehensive SEO and CMS metadata and formats the final output.
+    Generates comprehensive SEO and CMS metadata using a Pydantic parser for the main content
+    and separate, dedicated calls for taxonomic fields (country, publication, industry).
     """
-    log("-> Building prompt for SEO optimization and JSON formatting.")
-    seo_prompt = [
-        SystemMessage(content="You are an expert sub-editor and content strategist. Your task is to take a final article and "
-                              "prepare it for publishing by creating a title and all necessary CMS and SEO metadata. Format the "
-                              "entire output as a single, valid JSON object."),
+    log("-> Building structured prompt for main SEO metadata...")
+    
+    parser = PydanticOutputParser(pydantic_model=ArticleMetadata)
+    
+    # --- Step 1: Get the main metadata using the robust Pydantic parser ---
+    main_metadata_prompt = [
+        SystemMessage(content="You are an expert sub-editor. Your task is to generate a valid JSON object with the creative and SEO-related metadata for an article, following the provided schema. "
+                              "Do NOT include 'publications', 'countries', or 'industries' in this JSON object."),
         HumanMessage(content=f"""
-        Based on the following article, please perform these tasks and return a single JSON object with the specified keys.
-        **Every field is mandatory.**
-
-        ARTICLE:
+        {parser.get_format_instructions()}
+        
+        Please exclude the 'publications', 'countries', and 'industries' fields from your JSON output.
+        
+        Here is the article to analyze:
         ---
         {revised_article}
         ---
-
-        JSON OUTPUT REQUIREMENTS:
-        1.  "title": A concise, compelling, SEO-friendly title. This field is required.
-        2.  "body": The full revised article, formatted with HTML paragraph tags (`<p>`). This field is required.
-        3.  "publications": An array of strings with the names of the MOST SPECIFIC relevant publications (e.g., ["Slovenia Today"]). This is required.
-        4.  "countries": An array of strings with the exact names of countries mentioned (e.g., ["Slovenia"]).
-        5.  "industries": An array of strings with the names of relevant industries (e.g., ["Renewables", "Banking"]).
-        6.  "seo_description": A concise, engaging SEO meta description (155 characters max).
-        7.  "seo_keywords": A comma-separated string of relevant SEO keywords.
-        8.  "hashtags": An array of 3-5 relevant social media hashtags (e.g., ["#Slovenia", "#Aviation"]).
-        9.  "weekly_title_value": A very short, punchy title for a weekly newsletter.
-        10. "website_callout_value": A brief, attention-grabbing callout for the website's front page.
-        11. "social_media_callout_value": A short, engaging phrase for social media posts (less than 250 characters).
-        12. "abstract_value": A concise summary of the article's content (150 characters max).
-        13. "google_news_keywords_value": A comma-separated string of relevant keywords for Google News.
-        14. "daily_subject_value": **Required.** Choose ONE: "Macroeconomic News", "Banking And Finance", "Companies and Industries", or "Political".
-        15. "key_point_value": **Required.** Choose ONE: "Yes" or "No".
-        16. "machine_written_value": **Required.** Choose ONE: "Yes" or "No".
-        17. "byline_value": The author's name, or "staff writer" if not available.
-        18. "ballot_box_value": **Required.** Choose ONE: "Yes" or "No". If the article is about elections, this must be "Yes".
-        19. "africa_daily_section_value": If relevant, choose ONE from ["- None -", "Top Story", "Politics", "Business & Finance", "Energy & Commodities"].
-        20. "southeast_europe_today_sections_value": If relevant, choose ONE from ["- None -", "Top Story", "Business", "Finance", "Politics"].
-        21. "cee_news_watch_country_sections_value": If relevant, choose ONE from ["- None -", "Top Story", "Macro", "Politics", "SME", "Events", "Thematic Investing", "bneInvestigator"].
-        22. "n_africa_today_section_value": If relevant, choose ONE from ["- None -", "Top Story", "Politics", "Business & Finance", "Energy & Commodities"].
-        23. "middle_east_today_section_value": If relevant, choose ONE from ["- None -", "Top Story", "Politics", "Business & Finance", "Energy & Commodities"].
-        24. "baltic_states_today_sections_value": If relevant, choose ONE from ["- None -", "Top story", "Politics", "Economics", "Business"].
-        25. "asia_today_sections_value": If relevant, choose ONE from ["- None -", "Top Story", "Politics", "Business & Finance", "Sanctions"].
-        26. "latam_today_value": If relevant, choose ONE from ["- None -", "Top Story", "Politics", "Business & Finance", "Energy & Commodities"].
         """)
     ]
-    log("-> Sending request to LLM for final SEO and formatting...")
-    final_response = llm.invoke(seo_prompt)
     
+    log("-> Sending request to LLM for main metadata...")
     try:
-        # Use the robust safe_load_json to handle potential formatting issues
-        parsed_json = safe_load_json(final_response.content)
-        final_json_string = json.dumps(parsed_json)
-        log("-> Final JSON object received and validated.")
-        return final_json_string
+        response = llm.invoke(main_metadata_prompt)
+        parsed_output = parser.parse(response.content)
+        metadata = parsed_output.model_dump()
+        log("-> Main metadata received and validated.")
     except Exception as e:
-        log(f"-> 🔥 Could not parse JSON from LLM response: {e}")
-        return json.dumps({"error": f"Failed to parse SEO metadata from LLM: {e}", "raw_response": final_response.content})
+        log(f"-> 🔥 A critical error occurred during main metadata generation: {e}")
+        return json.dumps({"error": f"Failed to generate main metadata: {e}"})
+
+    # --- Step 2: Make separate, robust calls for taxonomic data ---
+    try:
+        metadata['countries'] = get_country_selection(llm, revised_article)
+        metadata['publications'] = get_publication_selection(llm, revised_article)
+        metadata['industries'] = get_industry_selection(llm, revised_article)
+        log("-> All taxonomic data successfully retrieved.")
+    except Exception as e:
+        log(f"-> 🔥 A critical error occurred during taxonomic data retrieval: {e}")
+        return json.dumps({"error": f"Failed to retrieve taxonomic data: {e}"})
+
+    return json.dumps(metadata)

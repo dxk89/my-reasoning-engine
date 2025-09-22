@@ -25,9 +25,63 @@ from my_framework.models.openai import ChatOpenAI, safe_load_json, normalize_art
 from my_framework.agents.tools import tool
 from .scraper import scrape_content
 from .llm_calls import get_initial_draft, get_revised_article, get_seo_metadata
+from .schemas import ArticleMetadata
 
 def log(message):
     print(f"   - {message}", flush=True)
+
+@tool
+def add_metadata_to_article(article_text: str, api_key: str) -> str:
+    """
+    Takes a pre-written article, generates all necessary CMS metadata for it, and returns the combined data as a JSON string.
+    """
+    log("🤖 TOOL: Starting metadata generation for pre-written article...")
+    llm = ChatOpenAI(model_name="gpt-4o", temperature=0.5, api_key=api_key)
+    
+    # The article text is already the "final" version, so we just need metadata for it.
+    final_json_string = get_seo_metadata(llm, article_text)
+    if isinstance(json.loads(final_json_string), dict) and "error" in json.loads(final_json_string):
+        return final_json_string
+
+    try:
+        parsed_data = safe_load_json(final_json_string)
+        
+        # Override the original body with the user-provided text to ensure it's unchanged.
+        # The AI only uses it for context. Format with <p> tags.
+        paragraphs = article_text.strip().split('\n')
+        body_html = "".join(f"<p>{p.strip()}</p>" for p in paragraphs if p.strip())
+        parsed_data["body"] = body_html
+
+        # Since the article was pre-written, set machine_written to "No"
+        parsed_data["machine_written_value"] = "No"
+        log("   - ✅ Set 'Machine written' field to 'No'.")
+        
+        # Map names from the single AI response to IDs
+        parsed_data["country_id_selections"] = [COUNTRY_MAP[name] for name in parsed_data.get("countries", []) if name in COUNTRY_MAP]
+        parsed_data["publication_id_selections"] = [PUBLICATION_MAP[name] for name in parsed_data.get("publications", []) if name in PUBLICATION_MAP]
+        parsed_data["industry_id_selections"] = [INDUSTRY_MAP[name] for name in parsed_data.get("industries", []) if name in INDUSTRY_MAP]
+
+        # Rename keys to match what the CMS tool expects
+        parsed_data["title_value"] = parsed_data.pop("title", "")
+        parsed_data["body_value"] = parsed_data.pop("body", "")
+
+        # New metadata logic
+        parsed_data["website_callout_value"] = paragraphs[0] if paragraphs else ""
+        parsed_data["social_media_callout_value"] = f"{parsed_data['title_value']} {' '.join(parsed_data.get('hashtags', []))}"
+        parsed_data["abstract_value"] = parsed_data["title_value"]
+        parsed_data["seo_keywords_value"] = f"intellinews, {parsed_data.get('seo_keywords', '')}"
+        parsed_data["google_news_keywords_value"] = parsed_data["seo_keywords_value"]
+
+        final_json_string = json.dumps(parsed_data)
+        log("   - ✅ Successfully extracted and mapped all entities from AI call.")
+        
+    except Exception as e:
+        log(f"   - ⚠️ Could not process data from AI call: {e}")
+        return json.dumps({"error": f"Failed to process data from AI call: {e}"})
+
+    log("✅ TOOL: Finished successfully.")
+    return final_json_string
+
 
 @tool
 def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: str, api_key: str) -> str:
@@ -56,6 +110,10 @@ def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: s
     try:
         parsed_data = safe_load_json(final_json_string)
         
+        # Force the 'machine_written_value' to always be 'Yes' for this workflow
+        parsed_data["machine_written_value"] = "Yes"
+        log("   - ✅ Set 'Machine written' field to 'Yes'.")
+        
         # Map names from the single AI response to IDs
         parsed_data["country_id_selections"] = [COUNTRY_MAP[name] for name in parsed_data.get("countries", []) if name in COUNTRY_MAP]
         parsed_data["publication_id_selections"] = [PUBLICATION_MAP[name] for name in parsed_data.get("publications", []) if name in PUBLICATION_MAP]
@@ -64,6 +122,15 @@ def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: s
         # Rename keys to match what the CMS tool expects
         parsed_data["title_value"] = parsed_data.pop("title", "")
         parsed_data["body_value"] = parsed_data.pop("body", "")
+
+        # New metadata logic
+        paragraphs = revised_article.strip().split('\n')
+        parsed_data["website_callout_value"] = paragraphs[0] if paragraphs else ""
+        parsed_data["social_media_callout_value"] = f"{parsed_data['title_value']} {' '.join(parsed_data.get('hashtags', []))}"
+        parsed_data["abstract_value"] = parsed_data["title_value"]
+        parsed_data["seo_keywords_value"] = f"intellinews, {parsed_data.get('seo_keywords', '')}"
+        parsed_data["google_news_keywords_value"] = parsed_data["seo_keywords_value"]
+        
 
         final_json_string = json.dumps(parsed_data)
         log("   - ✅ Successfully extracted and mapped all entities from single AI call.")
@@ -105,9 +172,9 @@ def post_article_to_cms(
 
 
     driver = None
+    is_render_env = 'RENDER' in os.environ
     try:
         chrome_options = webdriver.ChromeOptions()
-        is_render_env = 'RENDER' in os.environ
 
         if is_render_env:
             log("   - Running in Render environment (headless mode).")
@@ -152,10 +219,24 @@ def post_article_to_cms(
         
         log("📝 Filling article form...")
 
+        # --- Date Logic ---
+        gmt = pytz.timezone('GMT')
+        now_gmt = datetime.now(gmt)
+        if now_gmt.hour >= 7:
+            target_date = now_gmt + timedelta(days=1)
+        else:
+            target_date = now_gmt
+        target_date_str = target_date.strftime('%m/%d/%Y')
+        driver.execute_script(f"document.getElementById('edit-field-sending-date-und-0-value-datepicker-popup-0').value = '{target_date_str}';")
+
+
+        # --- Machine Written Checkbox ---
+        driver.execute_script("document.getElementById('edit-field-machine-written-und').checked = true;")
+
+
         # Primary Content & Metadata
         driver.find_element(By.ID, "edit-title").send_keys(remove_non_bmp_chars(article_content.get('title_value', '')))
         driver.find_element(By.ID, "edit-field-weekly-title-und-0-value").send_keys(remove_non_bmp_chars(article_content.get('weekly_title_value', '')))
-        select_dropdown_option(driver, 'edit-field-machine-written-und', article_content.get('machine_written_value'), log, "Machine written")
         driver.find_element(By.ID, "edit-field-bylines-und-0-field-byline-und").send_keys(remove_non_bmp_chars(article_content.get('byline_value', '')))
         driver.find_element(By.ID, "edit-field-website-callout-und-0-value").send_keys(remove_non_bmp_chars(article_content.get('website_callout_value', '')))
         driver.find_element(By.ID, "edit-field-social-media-callout-und-0-value").send_keys(remove_non_bmp_chars(article_content.get('social_media_callout_value', '')))
@@ -184,7 +265,7 @@ def post_article_to_cms(
 
         # Workflow & System Settings
         driver.find_element(By.ID, "edit-metatags-und-abstract-value").send_keys(remove_non_bmp_chars(article_content.get('abstract_value', '')))
-        driver.find_element(By.ID, "edit-metatags-und-keywords-value").send_keys(remove_non_bmp_chars(article_content.get('keywords_value', '')))
+        driver.find_element(By.ID, "edit-metatags-und-keywords-value").send_keys(remove_non_bmp_chars(article_content.get('seo_keywords_value', '')))
         driver.find_element(By.ID, "edit-metatags-und-news-keywords-value").send_keys(remove_non_bmp_chars(article_content.get('google_news_keywords_value', '')))
         
         if save_button_id:
@@ -202,5 +283,8 @@ def post_article_to_cms(
         return json.dumps({"error": f"Failed to post article to CMS. Error: {e}"})
     finally:
         if driver:
+            if not is_render_env:
+                log("   - Local environment detected. Waiting 30 seconds before closing browser...")
+                time.sleep(30)
             log("   - Quitting WebDriver.")
             driver.quit()

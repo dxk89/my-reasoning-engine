@@ -1,52 +1,12 @@
+# File: my_framework/src/my_framework/models/openai.py
 import json
 import textwrap
 from openai import OpenAI
-
-# Initialize OpenAI client
-client = OpenAI()
-
-# JSON schema for the final article object
-ARTICLE_JSON_SCHEMA = {
-    "name": "article_schema",
-    "schema": {
-        "type": "object",
-        "properties": {
-            "title": {"type": "string"},
-            "body": {"type": "string"},
-            "seo_description": {"type": "string"},
-            "seo_keywords": {
-                "type": "array",
-                "items": {"type": "string"}
-            },
-            "hashtags": {
-                "type": "array",
-                "items": {"type": "string"}
-            },
-            "meta": {
-                "type": "object",
-                "properties": {
-                    "source_url": {"type": "string"},
-                    "published_at": {"type": "string"},
-                    "byline": {"type": "string"}
-                },
-                "additionalProperties": True
-            }
-        },
-        "required": ["title", "body", "seo_description", "seo_keywords"],
-        "additionalProperties": True
-    }
-}
-
-# System message to force JSON output
-SYSTEM_JSON_ONLY = textwrap.dedent("""
-You are a formatter that outputs ONLY valid JSON that conforms to the provided schema.
-- No code fences
-- No prose
-- No comments
-- No emojis
-- No trailing commas
-""").strip()
-
+from ..core.schemas import AIMessage, HumanMessage, SystemMessage, MessageType
+from ..models.base import BaseChatModel
+from typing import List
+import os
+from pydantic import Field, BaseModel
 
 # ---- JSON Helper Functions ---- #
 
@@ -106,88 +66,43 @@ def normalize_article(doc: dict) -> dict:
     return doc
 
 
-# ---- Main LLM Call ---- #
-
-def call_model_for_article_json(messages):
-    """
-    Calls the LLM and enforces JSON-only output.
-    """
-    resp = client.responses.create(
-        model="gpt-4o",
-        messages=messages + [{"role": "system", "content": SYSTEM_JSON_ONLY}],
-        response_format={"type": "json_schema", "json_schema": ARTICLE_JSON_SCHEMA},
-        max_output_tokens=2000,
-        temperature=0.2,
-        timeout_ms=60000  # 60 seconds instead of 20
-    )
-
-    # Get raw output text
-    raw_text = resp.output_text
-
-    # Save to file for debugging
-    with open("/tmp/final_output.txt", "w", encoding="utf-8") as f:
-        f.write(raw_text)
-
-    # Parse + normalize
-    parsed = safe_load_json(raw_text)
-    parsed = normalize_article(parsed)
-    return parsed
-
-
 # ---- ChatOpenAI Wrapper Class ---- #
 
-class ChatOpenAI:
+class ChatOpenAI(BaseModel, BaseChatModel):
     """
-    A lightweight wrapper around OpenAI’s chat completions API. Instances of this
-    class can be used anywhere in the framework where a ChatOpenAI with an
-    `.invoke()` method is expected.
+    A lightweight wrapper around OpenAI’s chat completions API that fits into the framework.
     """
-    def __init__(
-        self,
-        model_name: str = "gpt-3.5-turbo",
-        temperature: float = 0.5,
-        api_key: str | None = None,
-        max_tokens: int = 2000
-    ) -> None:
-        # Allow per-instance API key override; falls back to env if None
-        self.client = OpenAI(api_key=api_key)
-        self.model_name = model_name
-        self.temperature = temperature
-        self.max_tokens = max_tokens
+    model_name: str = "gpt-3.5-turbo"
+    temperature: float = 0.5
+    api_key: str | None = None
+    max_tokens: int = 2000
+    client: OpenAI = Field(default=None, exclude=True)
 
-    def invoke(self, messages):
+    def __init__(self, **data):
+        super().__init__(**data)
+        self.client = OpenAI(api_key=self.api_key or os.environ.get("OPENAI_API_KEY"))
+
+    def invoke(self, input: List[MessageType], config=None) -> AIMessage:
         """
-        Send a list of messages to the chat model and return a simple object
-        with a `.content` attribute containing the assistant’s reply.
-        Each message should be either a dict with 'role' and 'content' fields,
-        or an instance of my_framework.core.schemas.BaseMessage (which has
-        .role and .content attributes).
+        Send a list of messages to the chat model and return an AIMessage.
         """
-        formatted = []
-        for m in messages:
-            # Convert pydantic messages or dicts to the format expected by the API
-            if hasattr(m, "role") and hasattr(m, "content"):
-                formatted.append({"role": m.role, "content": m.content})
+        formatted_messages = []
+        for m in input:
+            if isinstance(m, (HumanMessage, AIMessage, SystemMessage)):
+                formatted_messages.append({"role": m.role, "content": m.content})
             elif isinstance(m, dict) and "role" in m and "content" in m:
-                formatted.append({"role": m["role"], "content": m["content"]})
+                formatted_messages.append(m)
             else:
                 raise ValueError(f"Unsupported message type: {m!r}")
 
-            # The OpenAI API currently only supports the three roles "system", "user"
-            # (for human messages) and "assistant" (for AI messages). If the caller
-            # passes something different, it may cause an API error. We do not
-            # enforce role validation here to preserve backwards compatibility.
-
         response = self.client.chat.completions.create(
             model=self.model_name,
-            messages=formatted,
+            messages=formatted_messages,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
-        # Wrap the content in a simple object that exposes a `.content` property,
-        # similar to the return type used by other parts of the framework.
-        class _Result:
-            def __init__(self, content):
-                self.content = content
+        
+        return AIMessage(content=response.choices[0].message.content)
 
-        return _Result(response.choices[0].message.content)
+    class Config:
+        arbitrary_types_allowed = True

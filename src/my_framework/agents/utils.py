@@ -834,6 +834,27 @@ INDUSTRY_MAP = {
 
 # --- HELPER FUNCTIONS ---
 
+def get_industry_prompt(article_title, article_body, industries):
+    """Creates a prompt to select the most appropriate industries."""
+    return f"""
+    You are an expert data analyst. Your task is to select the most relevant industries for the given article
+    from the comprehensive list provided.
+
+    Here is the list of available industries:
+    {industries}
+
+    RULES:
+    - You MUST select at least one industry.
+    - CRITICAL: Only select the most specific industry possible. For example, if the article is about
+      "Oil & Gas Drilling", you must select that, not the top-level "Energy, oil, gas & combustibles".
+    - Only select a top-level industry (e.g., "Industrials") if the article is a broad overview of that entire sector.
+    - Your response must be ONLY a comma-separated list of the selected industry names.
+
+    ARTICLE FOR ANALYSIS:
+    Article Title: "{article_title}"
+    Article Body: "{article_body}"
+    """
+
 def get_metadata_prompt(article_title, article_body):
     """Creates the prompt for the more creative metadata fields."""
     return f"""

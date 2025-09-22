@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Journalist Bot v1.4</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #111827; color: #d1d5db; }
+        .container { max-width: 1200px; margin: auto; padding: 2rem; }
+        .form-input, .form-textarea, .form-select {
+            background-color: #374151; border: 1px solid #4b5563; border-radius: 0.375rem;
+            padding: 0.5rem 0.75rem; width: 100%; color: #d1d5db;
+        }
+        .form-input:focus, .form-textarea:focus, .form-select:focus { outline: 2px solid #3b82f6; border-color: transparent; }
+        .btn {
+            background-color: #2563eb; color: white; font-weight: 600; padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem; border: none; cursor: pointer; transition: background-color 0.2s;
+        }
+        .btn:hover:not(:disabled) { background-color: #1d4ed8; }
+        .btn:disabled { background-color: #4b5563; cursor: not-allowed; }
+        .btn-secondary { background-color: #4b5563; }
+        .btn-secondary:hover { background-color: #374151; }
+        .label { display: block; margin-bottom: 0.25rem; font-weight: 500; color: #9ca3af; }
+        .tab { padding: 0.75rem 1.5rem; cursor: pointer; border-bottom: 2px solid transparent; }
+        .tab-active { color: #3b82f6; border-bottom-color: #3b82f6; }
+        .tab-content { display: none; }
+        .tab-content-active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-white">AI Journalist Bot</h1>
+            <p class="text-xl text-gray-400">Version 1.4</p>
+        </header>
+
+        <main>
+            <div id="main-content">
+                <div id="config-section" class="bg-gray-800 p-6 rounded-lg mb-6 max-w-2xl mx-auto">
+                    <h2 class="text-2xl font-semibold text-white mb-4">Configuration</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="ai_model" class="label">AI Model</label>
+                            <select id="ai_model" class="form-select">
+                                <option value="openai" selected>OpenAI (gpt-4o)</option>
+                            </select>
+                        </div>
+                        <div id="openai-key-div">
+                            <label for="openai_api_key" class="label">OpenAI (ChatGPT) API Key</label>
+                            <input type="password" id="openai_api_key" class="form-input">
+                        </div>
+                        <div>
+                            <label for="login_url" class="label">Login URL</label>
+                            <input type="text" id="login_url" class="form-input">
+                        </div>
+                        <div>
+                            <label for="username" class="label">Username</label>
+                            <input type="text" id="username" class="form-input">
+                        </div>
+                        <div>
+                            <label for="password" class="label">Password</label>
+                            <input type="password" id="password" class="form-input">
+                        </div>
+                        <div>
+                            <label for="add_article_url" class="label">Add Article URL</label>
+                            <input type="text" id="add_article_url" class="form-input">
+                        </div>
+                         <div>
+                            <label for="save_button_id" class="label">Save Button ID</label>
+                            <input type="text" id="save_button_id" class="form-input">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex space-x-4 mb-8 max-w-2xl mx-auto">
+                    <button id="save-settings-btn" class="btn btn-secondary w-full">Save Settings</button>
+                    <button id="load-settings-btn" class="btn btn-secondary w-full">Load Settings</button>
+                </div>
+
+                <div class="flex border-b border-gray-700 max-w-2xl mx-auto mb-6">
+                    <div id="tab-generate" class="tab tab-active">Generate from URL</div>
+                    <div id="tab-submit" class="tab">Submit Pre-written Article</div>
+                </div>
+
+                <div class="max-w-2xl mx-auto">
+                    <div id="content-generate" class="tab-content tab-content-active space-y-6">
+                        </div>
+                    <div id="content-submit" class="tab-content space-y-6">
+                        </div>
+                </div>
+                
+                <div class="max-w-2xl mx-auto mt-8">
+                    <button id="run-bot-btn" class="btn w-full text-lg">
+                        <span id="run-bot-btn-text">Process All Articles</span>
+                        <div id="loader" class="hidden animate-spin rounded-full h-5 w-5 border-b-2 border-white ml-3"></div>
+                    </button>
+                </div>
+                
+                <div id="status-message" class="mt-6 text-center text-lg text-green-400 font-semibold"></div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const CONFIG_KEY = 'journalistBotConfig_v1.4';
+        const MAX_ARTICLES = 3;
+
+        const ui = {
+            runBtn: document.getElementById('run-bot-btn'),
+            runBtnText: document.getElementById('run-bot-btn-text'),
+            loader: document.getElementById('loader'),
+            saveBtn: document.getElementById('save-settings-btn'),
+            loadBtn: document.getElementById('load-settings-btn'),
+            configSection: document.getElementById('config-section'),
+            statusMessage: document.getElementById('status-message'),
+            tabGenerate: document.getElementById('tab-generate'),
+            tabSubmit: document.getElementById('tab-submit'),
+            contentGenerate: document.getElementById('content-generate'),
+            contentSubmit: document.getElementById('content-submit'),
+        };
+        
+        let activeTab = 'generate';
+
+        function createGenerateInput(index) {
+            const id = index + 1;
+            return `
+                <div class="bg-gray-800 p-6 rounded-lg">
+                    <h3 class="text-xl font-semibold text-white mb-4">Article ${id} to Generate</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="source_url_${id}" class="label">Source URL</label>
+                            <input type="text" id="source_url_${id}" class="form-input">
+                        </div>
+                        <div>
+                            <label for="prompt_${id}" class="label">Prompt</label>
+                            <textarea id="prompt_${id}" class="form-textarea" rows="2"></textarea>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function createSubmitInput(index) {
+            const id = index + 1;
+            return `
+                 <div class="bg-gray-800 p-6 rounded-lg">
+                    <h3 class="text-xl font-semibold text-white mb-4">Pre-written Article ${id}</h3>
+                    <div>
+                        <label for="article_text_${id}" class="label">Paste Full Article Text</label>
+                        <textarea id="article_text_${id}" class="form-textarea" rows="8"></textarea>
+                    </div>
+                </div>
+            `;
+        }
+
+        function initializeUI() {
+            let generateHTML = '';
+            let submitHTML = '';
+            for (let i = 0; i < MAX_ARTICLES; i++) {
+                generateHTML += createGenerateInput(i);
+                submitHTML += createSubmitInput(i);
+            }
+            ui.contentGenerate.innerHTML = generateHTML;
+            ui.contentSubmit.innerHTML = submitHTML;
+        }
+
+        function switchTab(tab) {
+            activeTab = tab;
+            ui.tabGenerate.classList.toggle('tab-active', tab === 'generate');
+            ui.tabSubmit.classList.toggle('tab-active', tab === 'submit');
+            ui.contentGenerate.classList.toggle('tab-content-active', tab === 'generate');
+            ui.contentSubmit.classList.toggle('tab-content-active', tab === 'submit');
+        }
+
+        function getAllInputIds() {
+            const ids = [];
+            ui.configSection.querySelectorAll('input, select').forEach(el => ids.push(el.id));
+            for (let i = 1; i <= MAX_ARTICLES; i++) {
+                ids.push(`source_url_${i}`, `prompt_${i}`, `article_text_${i}`);
+            }
+            return ids;
+        }
+
+        function saveSettings() {
+            const settings = { activeTab };
+            getAllInputIds().forEach(id => {
+                const element = document.getElementById(id);
+                if (element) settings[id] = element.value;
+            });
+            localStorage.setItem(CONFIG_KEY, JSON.stringify(settings));
+            ui.statusMessage.textContent = '✅ Settings saved to your browser.';
+            alert('Settings saved!');
+        }
+
+        function loadSettings() {
+            const settings = JSON.parse(localStorage.getItem(CONFIG_KEY));
+            if (settings) {
+                getAllInputIds().forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element && settings[id] !== undefined) {
+                        element.value = settings[id];
+                    }
+                });
+                switchTab(settings.activeTab || 'generate');
+                ui.statusMessage.textContent = '✅ Settings loaded from your browser.';
+            } else {
+                ui.statusMessage.textContent = 'ℹ️ No saved settings found.';
+            }
+        }
+        
+        function setBotRunning(isRunning) {
+            ui.runBtn.disabled = isRunning;
+            ui.runBtnText.textContent = isRunning ? 'Processing...' : 'Process All Articles';
+            ui.loader.classList.toggle('hidden', !isRunning);
+        }
+
+        async function runBot() {
+            setBotRunning(true);
+            ui.statusMessage.textContent = '🤖 Starting bot... Please wait.';
+            
+            const configData = { active_tab: activeTab };
+            getAllInputIds().forEach(id => {
+                 const element = document.getElementById(id);
+                 if (element) configData[id] = element.value;
+            });
+            
+            if (configData.ai_model === 'openai' && !configData.openai_api_key) {
+                alert('Error: OpenAI API Key is missing!');
+                ui.statusMessage.textContent = '🔥 Bot stopped: Missing OpenAI API Key.';
+                setBotRunning(false);
+                return;
+            }
+
+            try {
+                const response = await fetch('/invoke', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ "input": configData })
+                });
+                
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || 'An unknown error occurred.');
+                }
+                ui.statusMessage.textContent = `🚀 ${data.output}`;
+            } catch (error) {
+                ui.statusMessage.textContent = `🔥 Error starting bot: ${error.message}`;
+            } finally {
+                setBotRunning(false);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeUI();
+            loadSettings();
+            ui.saveBtn.addEventListener('click', saveSettings);
+            ui.loadBtn.addEventListener('click', loadSettings);
+            ui.runBtn.addEventListener('click', runBot);
+            ui.tabGenerate.addEventListener('click', () => switchTab('generate'));
+            ui.tabSubmit.addEventListener('click', () => switchTab('submit'));
+        });
+    </script>
+</body>
+</html>

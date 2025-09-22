@@ -30,6 +30,10 @@ class PydanticOutputParser(BaseOutputParser[T]):
     """
     pydantic_model: Type[T]
 
+    def __init__(self, *, pydantic_model: Type[T]):
+        super().__init__()
+        self.pydantic_model = pydantic_model
+
     def get_format_instructions(self) -> str:
         """Returns instructions for the LLM on how to format its output."""
         schema = self.pydantic_model.model_json_schema()
