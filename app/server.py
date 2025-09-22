@@ -12,10 +12,13 @@ from dotenv import load_dotenv
 # and then get the parent directory (the project root)
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 src_path = os.path.join(project_root, 'src')
+app_path = os.path.dirname(__file__)
 
-# Add the 'src' directory to the Python path
+# Add the 'src' and 'app' directories to the Python path
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
+if app_path not in sys.path:
+    sys.path.insert(0, app_path)
 # --- END OF FIX ---
 
 load_dotenv()
