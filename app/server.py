@@ -26,8 +26,8 @@ import asyncio
 import queue
 from my_framework.apps.journalist import generate_article_and_metadata, post_article_to_cms, add_metadata_to_article
 
-# --- WebSocket Log Handler ---
-class WebSocketLogHandler(logging.Handler):
+# --- Thread-Safe WebSocket Log Handler ---
+class QueueLogHandler(logging.Handler):
     def __init__(self, q):
         super().__init__()
         self.queue = q
@@ -37,21 +37,27 @@ class WebSocketLogHandler(logging.Handler):
 
 # --- Setup Logging ---
 log_queue = queue.Queue()
-log_handler = WebSocketLogHandler(log_queue)
+log_handler = QueueLogHandler(log_queue)
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+# Remove any default handlers to avoid duplicate console logs
+for handler in logger.handlers[:]:
+    logger.removeHandler(handler)
 logger.addHandler(log_handler)
+
 
 # --- WebSocket Connections ---
 active_connections: list[WebSocket] = []
 
 async def log_sender():
+    """Continuously checks the queue and sends logs to all connected clients."""
     while True:
-        if not log_queue.empty():
-            log_entry = log_queue.get()
+        try:
+            log_entry = log_queue.get_nowait()
             for connection in active_connections:
                 await connection.send_text(log_entry)
-        await asyncio.sleep(0.1)
+        except queue.Empty:
+            await asyncio.sleep(0.1) # Wait a bit if the queue is empty
 
 app = FastAPI(
     title="Advanced AI Journalist Orchestrator",
@@ -61,6 +67,7 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup_event():
+    """Start the log sender task when the application starts."""
     asyncio.create_task(log_sender())
 
 # --- Diagnostic Code ---
@@ -155,7 +162,7 @@ async def invoke_run(request: dict):
     thread = threading.Thread(target=journalist_workflow, args=(config_data,))
     thread.daemon = True
     thread.start()
-    return {"output": "Successfully started the journalist workflow. Check the server logs for detailed progress."}
+    return {"output": "Starting Process"}
 
 @app.get("/", response_class=FileResponse)
 async def read_index():
