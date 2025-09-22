@@ -23,41 +23,45 @@ import json
 import pprint
 import logging
 import asyncio
+import queue
 from my_framework.apps.journalist import generate_article_and_metadata, post_article_to_cms, add_metadata_to_article
 
 # --- WebSocket Log Handler ---
 class WebSocketLogHandler(logging.Handler):
-    def __init__(self, loop):
+    def __init__(self, q):
         super().__init__()
-        self.loop = loop
-        self.active_connections = []
-
-    def add_socket(self, websocket: WebSocket):
-        self.active_connections.append(websocket)
-
-    def remove_socket(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        self.queue = q
 
     def emit(self, record):
-        async def send_log():
-            log_entry = self.format(record)
-            for connection in self.active_connections:
-                await connection.send_text(log_entry)
-        
-        asyncio.run_coroutine_threadsafe(send_log(), self.loop)
+        self.queue.put(self.format(record))
 
 # --- Setup Logging ---
-loop = asyncio.get_event_loop()
-log_handler = WebSocketLogHandler(loop)
+log_queue = queue.Queue()
+log_handler = WebSocketLogHandler(log_queue)
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logger.addHandler(log_handler)
+
+# --- WebSocket Connections ---
+active_connections: list[WebSocket] = []
+
+async def log_sender():
+    while True:
+        if not log_queue.empty():
+            log_entry = log_queue.get()
+            for connection in active_connections:
+                await connection.send_text(log_entry)
+        await asyncio.sleep(0.1)
 
 app = FastAPI(
     title="Advanced AI Journalist Orchestrator",
     version="1.4",
     description="An API that runs a robust, direct workflow for generating and posting articles."
 )
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(log_sender())
 
 # --- Diagnostic Code ---
 print("--- Python Application Environment Variables ---")
@@ -162,9 +166,9 @@ async def read_index():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    log_handler.add_socket(websocket)
+    active_connections.append(websocket)
     try:
         while True:
             await websocket.receive_text()
     except Exception:
-        log_handler.remove_socket(websocket)
+        active_connections.remove(websocket)
