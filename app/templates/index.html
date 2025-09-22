@@ -121,20 +121,7 @@
         const CONFIG_KEY = 'journalistBotConfig_v1.4';
         const MAX_ARTICLES = 3;
 
-        const ui = {
-            runBtn: document.getElementById('run-bot-btn'),
-            runBtnText: document.getElementById('run-bot-btn-text'),
-            loader: document.getElementById('loader'),
-            saveBtn: document.getElementById('save-settings-btn'),
-            loadBtn: document.getElementById('load-settings-btn'),
-            configSection: document.getElementById('config-section'),
-            statusMessage: document.getElementById('status-message'),
-            tabGenerate: document.getElementById('tab-generate'),
-            tabSubmit: document.getElementById('tab-submit'),
-            contentGenerate: document.getElementById('content-generate'),
-            contentSubmit: document.getElementById('content-submit'),
-            logContainer: document.getElementById('log-container'),
-        };
+        let ui;
         
         let activeTab = 'generate';
 
@@ -268,16 +255,38 @@
         }
 
         function connectWebSocket() {
-            const ws = new WebSocket(`ws://${window.location.host}/ws`);
-            ws.onmessage = (event) => {
-                const logEntry = document.createElement('div');
-                logEntry.textContent = event.data;
-                ui.logContainer.appendChild(logEntry);
-                ui.logContainer.scrollTop = ui.logContainer.scrollHeight;
-            };
+            try {
+                const ws = new WebSocket(`ws://${window.location.host}/ws`);
+                ws.onmessage = (event) => {
+                    const logEntry = document.createElement('div');
+                    logEntry.textContent = event.data;
+                    ui.logContainer.appendChild(logEntry);
+                    ui.logContainer.scrollTop = ui.logContainer.scrollHeight;
+                };
+                ws.onerror = (error) => {
+                    console.error('WebSocket Error:', error);
+                };
+            } catch (error) {
+                console.error('Failed to connect to WebSocket:', error);
+            }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            ui = {
+                runBtn: document.getElementById('run-bot-btn'),
+                runBtnText: document.getElementById('run-bot-btn-text'),
+                loader: document.getElementById('loader'),
+                saveBtn: document.getElementById('save-settings-btn'),
+                loadBtn: document.getElementById('load-settings-btn'),
+                configSection: document.getElementById('config-section'),
+                statusMessage: document.getElementById('status-message'),
+                tabGenerate: document.getElementById('tab-generate'),
+                tabSubmit: document.getElementById('tab-submit'),
+                contentGenerate: document.getElementById('content-generate'),
+                contentSubmit: document.getElementById('content-submit'),
+                logContainer: document.getElementById('log-container'),
+            };
+
             initializeUI();
             loadSettings();
             connectWebSocket();

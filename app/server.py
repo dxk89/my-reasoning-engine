@@ -27,8 +27,9 @@ from my_framework.apps.journalist import generate_article_and_metadata, post_art
 
 # --- WebSocket Log Handler ---
 class WebSocketLogHandler(logging.Handler):
-    def __init__(self):
+    def __init__(self, loop):
         super().__init__()
+        self.loop = loop
         self.active_connections = []
 
     def add_socket(self, websocket: WebSocket):
@@ -43,14 +44,14 @@ class WebSocketLogHandler(logging.Handler):
             for connection in self.active_connections:
                 await connection.send_text(log_entry)
         
-        asyncio.create_task(send_log())
+        asyncio.run_coroutine_threadsafe(send_log(), self.loop)
 
 # --- Setup Logging ---
-log_handler = WebSocketLogHandler()
+loop = asyncio.get_event_loop()
+log_handler = WebSocketLogHandler(loop)
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logger.addHandler(log_handler)
-
 
 app = FastAPI(
     title="Advanced AI Journalist Orchestrator",
