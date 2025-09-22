@@ -1,25 +1,18 @@
 # File: my_framework/app/server.py
 
-# --- FIX FOR LOCAL DEVELOPMENT ---
-# This code adds the project's root directory to the Python path
-# so that it can find the 'my_framework' module.
-# It has no effect when running on Render, so it's safe to include.
 import sys
 import os
 from dotenv import load_dotenv
 
-# Get the absolute path of the directory containing this script (app)
-# and then get the parent directory (the project root)
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+# This is a more robust way to add project directories to the python path
+# It should work both locally and on Render
+app_dir = os.path.dirname(__file__)
+project_root = os.path.abspath(os.path.join(app_dir, '..'))
 src_path = os.path.join(project_root, 'src')
-app_path = os.path.dirname(__file__)
-
-# Add the 'src' and 'app' directories to the Python path
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
-if app_path not in sys.path:
-    sys.path.insert(0, app_path)
-# --- END OF FIX ---
 
 load_dotenv()
 
@@ -29,8 +22,28 @@ import threading
 import json
 import pprint
 import logging
+import asyncio
 from my_framework.apps.journalist import generate_article_and_metadata, post_article_to_cms, add_metadata_to_article
-from log_handler import WebSocketLogHandler
+
+# --- WebSocket Log Handler ---
+class WebSocketLogHandler(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.active_connections = []
+
+    def add_socket(self, websocket: WebSocket):
+        self.active_connections.append(websocket)
+
+    def remove_socket(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    def emit(self, record):
+        async def send_log():
+            log_entry = self.format(record)
+            for connection in self.active_connections:
+                await connection.send_text(log_entry)
+        
+        asyncio.create_task(send_log())
 
 # --- Setup Logging ---
 log_handler = WebSocketLogHandler()
