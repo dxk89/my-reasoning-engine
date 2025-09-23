@@ -28,16 +28,19 @@ def get_initial_draft(llm: ChatOpenAI, user_prompt: str, source_content: str) ->
     return draft_article
 
 
-def get_revised_article(llm: ChatOpenAI, source_content: str, draft_article: str) -> str:
-    # ... (This function remains the same)
+def get_revised_article(llm: ChatOpenAI, source_content: str, draft_article: str, user_prompt: str) -> str:
+    """
+    Revises a draft article based on the source content and user prompt, with a strict focus on factual accuracy.
+    """
     log("-> Building prompt for fact-checking and stylistic improvements.")
     revision_prompt = [
         SystemMessage(content="You are a meticulous editor for intellinews.com. Your task is to review a draft article. "
-                              "First, ensure every claim is fully supported by the provided SOURCE CONTENT, correcting "
-                              "any inaccuracies. Second, refine the writing to match the professional, insightful, and "
-                              "objective style of intellinews.com."),
-        HumanMessage(content=f"SOURCE CONTENT:\n---\n{source_content}\n---\n\nDRAFT ARTICLE:\n---\n{draft_article}\n---\n\n"
-                             "Please provide the revised, fact-checked, and stylistically improved article.")
+                              "Your primary responsibility is to ensure that every claim in the article is fully supported by the provided SOURCE CONTENT. "
+                              "You must not add any information that is not present in the source text, even if you know it to be true. "
+                              "You must also ensure the article directly addresses the original USER PROMPT. "
+                              "Finally, refine the writing to match the professional, insightful, and objective style of intellinews.com."),
+        HumanMessage(content=f"USER PROMPT:\n---\n{user_prompt}\n---\n\nSOURCE CONTENT:\n---\n{source_content}\n---\n\nDRAFT ARTICLE:\n---\n{draft_article}\n---\n\n"
+                             "Please provide the revised, fact-checked, and stylistically improved article that adheres strictly to the source content and user prompt.")
     ]
     log("-> Sending request to LLM for revision...")
     revised_response = llm.invoke(revision_prompt)

@@ -99,7 +99,7 @@ def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: s
     if "error" in draft_article:
         return json.dumps({"error": draft_article})
         
-    revised_article = get_revised_article(llm, source_content, draft_article)
+    revised_article = get_revised_article(llm, source_content, draft_article, user_prompt)
     if "error" in revised_article:
         return json.dumps({"error": revised_article})
         
