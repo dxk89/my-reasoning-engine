@@ -28,7 +28,7 @@ def get_initial_draft(llm: ChatOpenAI, user_prompt: str, source_content: str) ->
     return draft_article
 
 
-def get_revised_article(llm: ChatOpenAI, source_content: str, draft_article: str, user_prompt: str) -> str:
+def get_revised_article(llm: ChatOpenAI, source_content: str, draft_article: str, user_prompt: str, source_url: str) -> str:
     """
     Revises a draft article based on the source content and user prompt, with a strict focus on factual accuracy.
     """
@@ -38,8 +38,11 @@ def get_revised_article(llm: ChatOpenAI, source_content: str, draft_article: str
                               "Your primary responsibility is to ensure that every claim in the article is fully supported by the provided SOURCE CONTENT. "
                               "You must not add any information that is not present in the source text, even if you know it to be true. "
                               "You must also ensure the article directly addresses the original USER PROMPT. "
-                              "Finally, refine the writing to match the professional, insightful, and objective style of intellinews.com."),
-        HumanMessage(content=f"USER PROMPT:\n---\n{user_prompt}\n---\n\nSOURCE CONTENT:\n---\n{source_content}\n---\n\nDRAFT ARTICLE:\n---\n{draft_article}\n---\n\n"
+                              "Finally, refine the writing to match the professional, insightful, and objective style of intellinews.com. "
+                              "At the end of the article body, you must add a line with the source of the article in the format 'Source: [URL]'. "
+                              "Do not include a 'Tags' list or any promotional text like 'For more in-depth analysis...'. "
+                              "If the source article is quoting another source, you must find the original source and use that for the article."),
+        HumanMessage(content=f"USER PROMPT:\n---\n{user_prompt}\n---\n\nSOURCE CONTENT:\n---\n{source_content}\n---\n\nDRAFT ARTICLE:\n---\n{draft_article}\n---\n\nSOURCE URL: {source_url}\n\n"
                              "Please provide the revised, fact-checked, and stylistically improved article that adheres strictly to the source content and user prompt.")
     ]
     log("-> Sending request to LLM for revision...")

@@ -18,6 +18,11 @@ def scrape_content(source_url: str) -> str:
         soup = BeautifulSoup(response.text, 'html.parser')
         paragraphs = soup.find_all('p', limit=40)
         source_content = ' '.join(p.get_text() for p in paragraphs)
+
+        if not source_content:
+            log("-> 🔥 URL scraping failed: No content found.")
+            return json.dumps({"error": "URL scraping failed: No content found."})
+
         log(f"-> Scraping successful ({len(source_content)} characters).")
         return source_content
     except Exception as e:
