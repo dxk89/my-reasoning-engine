@@ -7,6 +7,7 @@ from my_framework.parsers.standard import PydanticOutputParser
 from .schemas import ArticleMetadata
 import json
 from typing import List
+from . import rules  # Import the new rules file
 
 def log(message):
     print(f"   - {message}", flush=True)
@@ -15,10 +16,8 @@ def get_initial_draft(llm: ChatOpenAI, user_prompt: str, source_content: str) ->
     # ... (This function remains the same)
     log("-> Building prompt for initial draft.")
     draft_prompt = [
-        SystemMessage(content="You are an expert journalist. Your task is to write a professional, insightful, and "
-                              "objective article based on the user's prompt and the provided source content. Focus on "
-                              "financial, business, and political analysis of emerging markets."),
-        HumanMessage(content=f"USER PROMPT: \"{user_prompt}\"\n\nSOURCE CONTENT:\n---\n{source_content}\n---\n\nWrite "
+        SystemMessage(content=rules.INITIAL_DRAFT_SYSTEM_PROMPT),
+        HumanMessage(content=f"ADDITIONAL PROMPT INSTRUCTIONS: \"{user_prompt}\"\n\nSOURCE CONTENT:\n---\n{source_content}\n---\n\nWrite "
                              "the initial draft of the article now.")
     ]
     log("-> Sending request to LLM for initial draft...")
@@ -34,14 +33,7 @@ def get_revised_article(llm: ChatOpenAI, source_content: str, draft_article: str
     """
     log("-> Building prompt for fact-checking and stylistic improvements.")
     revision_prompt = [
-        SystemMessage(content="You are a meticulous editor for intellinews.com. Your task is to review a draft article. "
-                              "Your primary responsibility is to ensure that every claim in the article is fully supported by the provided SOURCE CONTENT. "
-                              "You must not add any information that is not present in the source text, even if you know it to be true. "
-                              "You must also ensure the article directly addresses the original USER PROMPT. "
-                              "Finally, refine the writing to match the professional, insightful, and objective style of intellinews.com. "
-                              "At the end of the article body, you must add a line with the source of the article in the format 'Source: [URL]'. "
-                              "Do not include a 'Tags' list or any promotional text like 'For more in-depth analysis...'. "
-                              "If the source article is quoting another source, you must find the original source and use that for the article."),
+        SystemMessage(content=rules.REVISED_ARTICLE_SYSTEM_PROMPT),
         HumanMessage(content=f"USER PROMPT:\n---\n{user_prompt}\n---\n\nSOURCE CONTENT:\n---\n{source_content}\n---\n\nDRAFT ARTICLE:\n---\n{draft_article}\n---\n\nSOURCE URL: {source_url}\n\n"
                              "Please provide the revised, fact-checked, and stylistically improved article that adheres strictly to the source content and user prompt.")
     ]
@@ -58,8 +50,7 @@ def get_country_selection(llm: ChatOpenAI, article_text: str) -> List[str]:
     countries_str = "\n".join([f"- {name}" for name in country_names])
     
     prompt = [
-        SystemMessage(content="You are an expert data extractor. Your only task is to identify the main country or countries discussed in the provided article text. "
-                              "You must choose from the list of available countries. Your response must be a single, comma-separated string of the selected country names."),
+        SystemMessage(content=rules.COUNTRY_SELECTION_SYSTEM_PROMPT),
         HumanMessage(content=f"""
         Based on the article text below, select the most relevant country or countries.
 
@@ -86,8 +77,7 @@ def get_publication_selection(llm: ChatOpenAI, article_text: str) -> List[str]:
     publications_str = "\n".join([f"- {name}" for name in publication_names])
 
     prompt = [
-        SystemMessage(content="You are an expert sub-editor. Your only task is to select the most appropriate publications for an article from a provided list. "
-                              "You must choose the MOST SPECIFIC publication possible. Your response must be a single, comma-separated string of the selected publication names."),
+        SystemMessage(content=rules.PUBLICATION_SELECTION_SYSTEM_PROMPT),
         HumanMessage(content=f"""
         Based on the article text below, select the most relevant publication(s).
 
@@ -114,8 +104,7 @@ def get_industry_selection(llm: ChatOpenAI, article_text: str) -> List[str]:
     industries_str = "\n".join([f"- {name}" for name in industry_names])
 
     prompt = [
-        SystemMessage(content="You are an expert data analyst. Your only task is to select the most relevant industries for an article from a provided list. "
-                              "You must choose the MOST SPECIFIC industry possible. Your response must be a single, comma-separated string of the selected industry names."),
+        SystemMessage(content=rules.INDUSTRY_SELECTION_SYSTEM_PROMPT),
         HumanMessage(content=f"""
         Based on the article text below, select the most relevant industry or industries.
 
@@ -146,8 +135,7 @@ def get_seo_metadata(llm: ChatOpenAI, revised_article: str) -> str:
     
     # --- Step 1: Get the main metadata using the robust Pydantic parser ---
     main_metadata_prompt = [
-        SystemMessage(content="You are an expert sub-editor. Your task is to generate a valid JSON object with the creative and SEO-related metadata for an article, following the provided schema. "
-                              "Do NOT include 'publications', 'countries', or 'industries' in this JSON object."),
+        SystemMessage(content=rules.SEO_METADATA_SYSTEM_PROMPT),
         HumanMessage(content=f"""
         {parser.get_format_instructions()}
         

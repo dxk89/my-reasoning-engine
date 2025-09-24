@@ -10,7 +10,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import NoSuchElementException
-from webdriver_manager.chrome import ChromeDriverManager
+# REMOVED: from webdriver_manager.chrome import ChromeDriverManager
 
 
 from my_framework.agents.utils import (
@@ -90,8 +90,11 @@ def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: s
     """
     log("🤖 TOOL 1: Starting multi-step article generation process...")
     source_content = scrape_content(source_url)
-    if isinstance(source_content, dict) and "error" in source_content:
-        return json.dumps(source_content)
+    
+    # Check if the scraper returned an error and stop the process if it did.
+    if source_content.strip().startswith('{"error":'):
+        log("   - 🔥 Scraper returned an error. Halting article generation.")
+        return source_content # Return the error JSON immediately
         
     llm = ChatOpenAI(model_name="gpt-4o", temperature=0.5, api_key=api_key)
     
@@ -145,17 +148,19 @@ def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: s
 @tool
 def post_article_to_cms(
     article_json_string: str,
-    login_url: str,
     username: str,
     password: str,
-    add_article_url: str,
-    save_button_id: str,
 ) -> str:
     """
     Logs into the CMS and submits an article using browser automation, filling all fields.
     This tool works both locally and on the Render deployment environment.
     """
     log("🤖 TOOL 2: Starting CMS Posting...")
+    
+    # --- Hardcoded values ---
+    login_url = "https://cms.intellinews.com/user/login"
+    add_article_url = "https://cms.intellinews.com/node/add/article"
+    save_button_id = "edit-submit"
     
     try:
         article_content = json.loads(article_json_string)
@@ -175,6 +180,7 @@ def post_article_to_cms(
     is_render_env = 'RENDER' in os.environ
     try:
         chrome_options = webdriver.ChromeOptions()
+        service = None
 
         if is_render_env:
             log("   - Running in Render environment (headless mode).")
@@ -193,11 +199,8 @@ def post_article_to_cms(
             service = Service(executable_path=driver_path)
         else:
             log("   - Running in local environment (visible mode).")
-            try:
-                service = Service(ChromeDriverManager().install())
-            except Exception as e:
-                log(f"   - 🔥 Failed to install/start ChromeDriver locally: {e}")
-                return json.dumps({"error": f"Could not start local ChromeDriver: {e}"})
+            # Selenium Manager will automatically handle the driver if service is None
+            service = None
         
         log("   - Initializing WebDriver...")
         driver = webdriver.Chrome(service=service, options=chrome_options)

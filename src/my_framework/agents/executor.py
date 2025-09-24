@@ -9,30 +9,7 @@ from ..core.runnables import Runnable
 from ..core.schemas import HumanMessage, AIMessage, SystemMessage
 from ..models.base import BaseChatModel
 from .utils import get_publication_ids_from_llm
-
-DEFAULT_AGENT_PROMPT_TEMPLATE = """
-You are a helpful assistant that has access to the following tools.
-Respond to the user's query by reasoning about the problem and using the tools
-to find the answer.
-
-Here are the available tools:
-{tools}
-
-Use the following format for your response:
-
-Thought: you should always think about what to do
-Action: the action to take, should be one of [{tool_names}]
-Action Input: the input to the action
-Observation: the result of the action
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now know the final answer
-Final Answer: the final answer to the original input question
-
-Begin!
-
-User Query: {input}
-Agent Scratchpad: {agent_scratchpad}
-"""
+from ..apps import rules
 
 class AgentExecutor(BaseModel, Runnable[Dict[str, Any], str]):
     """The runtime for a ReAct-style agent."""
@@ -68,7 +45,7 @@ class AgentExecutor(BaseModel, Runnable[Dict[str, Any], str]):
         intermediate_steps = ""
 
         # Use the custom system prompt if provided, otherwise use the default
-        prompt_template = self.system_prompt or DEFAULT_AGENT_PROMPT_TEMPLATE
+        prompt_template = self.system_prompt or rules.DEFAULT_AGENT_PROMPT_TEMPLATE
 
         # Get the publication IDs based on the article's content using an LLM call
         publication_ids_to_select = get_publication_ids_from_llm(self.llm, article_title, article_body)

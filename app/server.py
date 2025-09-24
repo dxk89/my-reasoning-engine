@@ -90,8 +90,11 @@ def journalist_workflow(config_data: dict):
         if active_tab == 'generate':
             source_url = config_data.get(f'source_url_{i}')
             prompt = config_data.get(f'prompt_{i}')
-            if not source_url or not prompt:
+            # --- THIS IS THE FIX ---
+            # We only check for the source_url, as the prompt is now optional.
+            if not source_url:
                 continue
+            # -------------------------
             logging.info(f"\n--- Processing Article {i} (Generating from URL) ---")
             try:
                 logging.info(f"   - Calling 'generate_article_and_metadata' tool...")
@@ -141,11 +144,8 @@ def journalist_workflow(config_data: dict):
                 logging.info("   - Calling 'post_article_to_cms' tool...")
                 post_result = post_article_to_cms.run(
                     article_json_string=article_json_string,
-                    login_url=config_data.get('login_url'),
                     username=config_data.get('username'),
                     password=config_data.get('password'),
-                    add_article_url=config_data.get('add_article_url'),
-                    save_button_id=config_data.get('save_button_id')
                 )
                 logging.info(f"   - ✅ Posting tool finished with result: {post_result}")
             except Exception as e:
