@@ -1,5 +1,4 @@
-
-# requirements.txt
+# File: my-journalist-project/my_framework/requirements.txt
 
 # Core web framework
 fastapi==0.103.2
@@ -16,13 +15,16 @@ openai>=1.40.0
 pydantic
 faiss-cpu
 tiktoken
+nltk
+spacy
 
 # Utilities
 python-dotenv
 pytz
+apscheduler
 
 # The following were in the original file but may not be strictly
-# necessary if you are only running the FastAPI app.  They are
+# necessary if you are only running the FastAPI app. They are
 # included here to remain compatible with the existing codebase.
 aiofiles==23.2.1
 anyio==3.7.1
@@ -42,4 +44,3 @@ starlette==0.27.0
 typing_extensions
 urllib3==2.0.6
 Werkzeug==2.2.3
-

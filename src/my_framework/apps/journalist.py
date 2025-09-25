@@ -10,8 +10,6 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import NoSuchElementException
-# REMOVED: from webdriver_manager.chrome import ChromeDriverManager
-
 
 from my_framework.agents.utils import (
     remove_non_bmp_chars,
@@ -26,6 +24,7 @@ from my_framework.agents.tools import tool
 from .scraper import scrape_content
 from .llm_calls import get_initial_draft, get_revised_article, get_seo_metadata
 from .schemas import ArticleMetadata
+from .style_guru import rewrite_and_score_article
 
 def log(message):
     print(f"   - {message}", flush=True)
@@ -84,7 +83,7 @@ def add_metadata_to_article(article_text: str, api_key: str) -> str:
 
 
 @tool
-def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: str, api_key: str) -> str:
+def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: str, api_key: str, use_style_guru: bool = False) -> str:
     """
     Generates a complete, fact-checked, and SEO-optimized article with all CMS metadata.
     """
@@ -105,6 +104,13 @@ def generate_article_and_metadata(source_url: str, user_prompt: str, ai_model: s
     revised_article = get_revised_article(llm, source_content, draft_article, user_prompt, source_url)
     if "error" in revised_article:
         return json.dumps({"error": revised_article})
+        
+    if use_style_guru:
+        log("   - 🤖 Using Style Guru to rewrite and score the article...")
+        title, body = revised_article.split('\n', 1)
+        rewritten_body, score = rewrite_and_score_article(title, body, api_key)
+        revised_article = f"{title}\n{rewritten_body}\n\n---\nStyle score: {score:.3f}"
+        log(f"   - ✅ Style Guru finished. Score: {score:.3f}")
         
     final_json_string = get_seo_metadata(llm, revised_article)
     if isinstance(json.loads(final_json_string), dict) and "error" in json.loads(final_json_string):

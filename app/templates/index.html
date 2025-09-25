@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Journalist Bot v1.4</title>
+    <title>AI Journalist Bot v1.5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -45,7 +45,7 @@
     <div class="container">
         <header class="text-center mb-8">
             <h1 class="text-4xl font-bold text-white">AI Journalist Bot</h1>
-            <p class="text-xl text-gray-400">Version 1.4</p>
+            <p class="text-xl text-gray-400">Version 1.5</p>
         </header>
 
         <main>
@@ -86,7 +86,13 @@
 
                 <div class="max-w-2xl mx-auto">
                     <div id="content-generate" class="tab-content tab-content-active space-y-6">
+                        <div class="bg-gray-800 p-6 rounded-lg">
+                            <div class="flex items-center">
+                                <input id="use_style_guru" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                <label for="use_style_guru" class="ml-2 block text-sm text-gray-300">Use Style Guru (Rewrite & Score)</label>
+                            </div>
                         </div>
+                    </div>
                     <div id="content-submit" class="tab-content space-y-6">
                         </div>
                 </div>
@@ -106,7 +112,7 @@
     </div>
 
     <script>
-        const CONFIG_KEY = 'journalistBotConfig_v1.4';
+        const CONFIG_KEY = 'journalistBotConfig_v1.5';
         const MAX_ARTICLES = 3;
 
         let ui;
@@ -152,7 +158,7 @@
                 generateHTML += createGenerateInput(i);
                 submitHTML += createSubmitInput(i);
             }
-            ui.contentGenerate.innerHTML = generateHTML;
+            ui.contentGenerate.insertAdjacentHTML('beforeend', generateHTML);
             ui.contentSubmit.innerHTML = submitHTML;
         }
 
@@ -167,6 +173,7 @@
         function getAllInputIds() {
             const ids = [];
             ui.configSection.querySelectorAll('input, select').forEach(el => ids.push(el.id));
+            ids.push('use_style_guru');
             for (let i = 1; i <= MAX_ARTICLES; i++) {
                 ids.push(`source_url_${i}`, `prompt_${i}`, `article_text_${i}`);
             }
@@ -177,7 +184,13 @@
             const settings = { activeTab };
             getAllInputIds().forEach(id => {
                 const element = document.getElementById(id);
-                if (element) settings[id] = element.value;
+                if (element) {
+                    if (element.type === 'checkbox') {
+                        settings[id] = element.checked;
+                    } else {
+                        settings[id] = element.value;
+                    }
+                }
             });
             localStorage.setItem(CONFIG_KEY, JSON.stringify(settings));
             ui.statusMessage.textContent = '✅ Settings saved to your browser.';
@@ -190,7 +203,11 @@
                 getAllInputIds().forEach(id => {
                     const element = document.getElementById(id);
                     if (element && settings[id] !== undefined) {
-                        element.value = settings[id];
+                        if (element.type === 'checkbox') {
+                            element.checked = settings[id];
+                        } else {
+                            element.value = settings[id];
+                        }
                     }
                 });
                 switchTab(settings.activeTab || 'generate');
@@ -213,7 +230,13 @@
             const configData = { active_tab: activeTab };
             getAllInputIds().forEach(id => {
                  const element = document.getElementById(id);
-                 if (element) configData[id] = element.value;
+                 if (element) {
+                    if (element.type === 'checkbox') {
+                        configData[id] = element.checked;
+                    } else {
+                        configData[id] = element.value;
+                    }
+                 }
             });
             
             if (configData.ai_model === 'openai' && !configData.openai_api_key) {

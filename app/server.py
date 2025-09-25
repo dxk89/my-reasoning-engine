@@ -16,8 +16,9 @@ if src_path not in sys.path:
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, WebSocket
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, WebSocket, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 import threading
 import json
 import pprint
@@ -25,6 +26,9 @@ import logging
 import asyncio
 import queue
 from my_framework.apps.journalist import generate_article_and_metadata, post_article_to_cms, add_metadata_to_article
+from my_framework.apps.style_guru import build_dataset, train_model
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 
 # --- Thread-Safe WebSocket Log Handler ---
 class QueueLogHandler(logging.Handler):
@@ -45,7 +49,6 @@ for handler in logger.handlers[:]:
     logger.removeHandler(handler)
 logger.addHandler(log_handler)
 
-
 # --- WebSocket Connections ---
 active_connections: list[WebSocket] = []
 
@@ -57,24 +60,48 @@ async def log_sender():
             for connection in active_connections:
                 await connection.send_text(log_entry)
         except queue.Empty:
-            await asyncio.sleep(0.1) # Wait a bit if the queue is empty
+            await asyncio.sleep(0.1)
+
+# --- Scheduler ---
+scheduler = BackgroundScheduler()
+
+def scheduled_update_job():
+    """The scheduled job to update the style model."""
+    logging.info("[⏰] Scheduled job running: updating style model...")
+    try:
+        build_dataset(limit=100)
+        train_model()
+        logging.info("[⏰] Scheduled job finished successfully.")
+    except Exception as e:
+        logging.error(f"[⏰] Scheduled job failed: {e}")
+
+# --- Template Engine ---
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), 'templates'))
 
 app = FastAPI(
     title="Advanced AI Journalist Orchestrator",
-    version="1.4",
+    version="1.5",
     description="An API that runs a robust, direct workflow for generating and posting articles."
 )
 
 @app.on_event("startup")
 async def startup_event():
-    """Start the log sender task when the application starts."""
+    """Start background tasks when the application starts."""
     asyncio.create_task(log_sender())
+    scheduler.add_job(
+        scheduled_update_job,
+        trigger=IntervalTrigger(hours=12),
+        id="style_guru_update",
+        name="Update style model every 12 hours",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logging.info("Scheduler started for automatic style model updates (every 12 hours).")
 
 # --- Diagnostic Code ---
 print("--- Python Application Environment Variables ---")
 pprint.pprint(dict(os.environ))
 print("----------------------------------------------")
-
 
 def journalist_workflow(config_data: dict):
     """
@@ -83,6 +110,7 @@ def journalist_workflow(config_data: dict):
     """
     logging.info("--- Starting Direct Journalist Workflow ---")
     active_tab = config_data.get('active_tab', 'generate')
+    use_style_guru = config_data.get('use_style_guru', False)
     
     for i in range(1, 4):
         article_json_string = None
@@ -90,11 +118,8 @@ def journalist_workflow(config_data: dict):
         if active_tab == 'generate':
             source_url = config_data.get(f'source_url_{i}')
             prompt = config_data.get(f'prompt_{i}')
-            # --- THIS IS THE FIX ---
-            # We only check for the source_url, as the prompt is now optional.
             if not source_url:
                 continue
-            # -------------------------
             logging.info(f"\n--- Processing Article {i} (Generating from URL) ---")
             try:
                 logging.info(f"   - Calling 'generate_article_and_metadata' tool...")
@@ -102,7 +127,8 @@ def journalist_workflow(config_data: dict):
                     source_url=source_url,
                     user_prompt=prompt,
                     ai_model=config_data.get('ai_model'),
-                    api_key=config_data.get('openai_api_key')
+                    api_key=config_data.get('openai_api_key'),
+                    use_style_guru=use_style_guru
                 )
             except Exception as e:
                 logging.error(f"   - 🔥 A critical error occurred during generation: {e}")
@@ -154,7 +180,6 @@ def journalist_workflow(config_data: dict):
             
     logging.info("\n--- ✅✅✅ Full Workflow Complete ✅✅✅ ---")
 
-
 @app.post("/invoke", summary="Run the full journalist workflow")
 async def invoke_run(request: dict):
     config_data = request.get("input", request)
@@ -164,11 +189,33 @@ async def invoke_run(request: dict):
     thread.start()
     return {"output": "Starting Process"}
 
-@app.get("/", response_class=FileResponse)
-async def read_index():
+@app.get("/", response_class=HTMLResponse)
+async def read_index(request: Request):
     """Serves the main HTML page to the user's browser."""
-    # This path is relative to the `my_framework` directory where you run the server
-    return os.path.join(os.path.dirname(__file__), 'templates', 'index.html')
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/styleguru", response_class=HTMLResponse)
+async def read_styleguru(request: Request):
+    """Serves the style guru page with scheduler status."""
+    job = scheduler.get_job("style_guru_update")
+    status = {
+        "is_scheduled": job is not None,
+        "next_run": job.next_run_time.strftime("%Y-%m-%d %H:%M:%S %Z") if job and job.next_run_time else "N/A"
+    }
+    return templates.TemplateResponse("styleguru.html", {"request": request, "status": status})
+
+@app.post("/update-style-model")
+async def update_style_model():
+    """Triggers the dataset building and model training process."""
+    try:
+        logging.info("--- Starting Style Guru Model Update ---")
+        build_dataset()
+        train_model()
+        logging.info("--- Style Guru Model Update Complete ---")
+        return {"output": "Style Guru model updated successfully."}
+    except Exception as e:
+        logging.error(f"--- Style Guru Model Update Failed: {e} ---")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
