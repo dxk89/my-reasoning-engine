@@ -9,6 +9,7 @@ requests==2.31.0
 beautifulsoup4
 selenium
 webdriver-manager
+newspaper3k
 
 # AI and data handling
 openai>=1.40.0
