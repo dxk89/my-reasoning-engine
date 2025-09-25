@@ -1,3 +1,4 @@
+# File: my-journalist-project/my_framework/render.yaml
 services:
   - type: web
     name: my-reasoning-engine
@@ -8,9 +9,9 @@ services:
       pip install -r requirements.txt
     startCommand: |
       echo "--- Starting Gunicorn Server ---"
-      cd my_framework && gunicorn app.server:app --bind 0.0.0.0:$PORT --timeout 180 --workers 1
+      cd my_framework && uvicorn app.server:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.9
+        value: 3.12.4
       - key: RENDER
         value: "true"

@@ -10,6 +10,7 @@ beautifulsoup4
 selenium
 webdriver-manager
 newspaper3k
+lxml[html_clean]
 
 # AI and data handling
 openai>=1.40.0
